@@ -1,7 +1,9 @@
 // app/result.tsx
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import DoshaRing from '../components/DoshaRing';
 import { DOSHA_INFO, getDominantDosha } from '../utils/doshaCalc';
+import { useAuth } from '../utils/authContext.tsx';
+import { saveQuizResults } from '../utils/database';
 
 interface Dosha {
   vata: number;
@@ -15,8 +17,25 @@ interface ResultProps {
 }
 
 export default function Result({ dosha, onContinue }: ResultProps) {
+  const { user, updateUserDosha } = useAuth();
   const dom = getDominantDosha(dosha);
   const info = DOSHA_INFO[dom];
+
+  const handleContinue = async () => {
+    if (!user) return;
+
+    // Save quiz results to database
+    const result = await saveQuizResults(user.id, dosha);
+
+    if (result.success) {
+      // Update the user context
+      updateUserDosha(dosha);
+      // Navigate to dashboard
+      onContinue();
+    } else {
+      Alert.alert('Error', result.message);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.root}>
@@ -48,7 +67,7 @@ export default function Result({ dosha, onContinue }: ResultProps) {
           <Text style={styles.cardText}>{info.text}</Text>
         </View>
 
-        <TouchableOpacity style={styles.btn} onPress={onContinue}>
+        <TouchableOpacity style={styles.btn} onPress={handleContinue}>
           <Text style={styles.btnText}>Enter Dashboard</Text>
         </TouchableOpacity>
       </ScrollView>

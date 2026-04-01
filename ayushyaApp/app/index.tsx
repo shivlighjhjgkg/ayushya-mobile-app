@@ -35,6 +35,21 @@ export default function Index() {
     initDatabase();
   }, []);
 
+  // Load dosha from user profile when user changes
+  useEffect(() => {
+    if (user?.quizCompleted && user?.dosha) {
+      setDosha(user.dosha);
+    }
+  }, [user?.dosha, user?.quizCompleted]);
+
+  // Reset screen and tab when user logs out
+  useEffect(() => {
+    if (!user) {
+      setScreen('login');
+      setTab('dash');
+    }
+  }, [user]);
+
   // If loading auth state, show nothing
   if (isLoading) {
     return null;
@@ -51,11 +66,20 @@ export default function Index() {
     return <Login onLoginSuccess={() => setScreen('hero')} onSwitchToRegister={() => setScreen('register')} />;
   }
 
-  // User is logged in, show main app flow
-  if (screen === 'hero') return <Hero onStart={() => setScreen('quiz')} />;
-  if (screen === 'quiz') return <Quiz onDone={(d: Dosha) => { setDosha(d); setScreen('result'); }} />;
-  if (screen === 'result') return <Result dosha={dosha} onContinue={() => setScreen('app')} />;
+  // User is logged in, check if quiz is completed
+  if (!user.quizCompleted) {
+    // User hasn't completed quiz yet, show quiz flow
+    if (screen === 'hero') return <Hero onStart={() => setScreen('quiz')} />;
+    if (screen === 'quiz') return <Quiz onDone={(d: Dosha) => { setDosha(d); setScreen('result'); }} />;
+    if (screen === 'result') return <Result dosha={dosha} onContinue={() => setScreen('app')} />;
+  } else {
+    // Quiz already completed, skip straight to app
+    if (screen !== 'app') {
+      setScreen('app');
+    }
+  }
 
+  // Show the main app
   const renderTab = () => {
     switch (tab) {
       case 'dash':    return <Dashboard dosha={dosha} onNav={(t: string) => setTab(t as Tab)} />;

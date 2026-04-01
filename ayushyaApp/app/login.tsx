@@ -30,6 +30,8 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
         id: result.user.id,
         email: result.user.email,
         name: result.user.name,
+        dosha: result.user.dosha,
+        quizCompleted: result.user.quizCompleted,
       });
       Alert.alert('✅ Success', result.message);
       onLoginSuccess();

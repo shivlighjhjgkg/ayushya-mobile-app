@@ -8,6 +8,12 @@ export interface User {
   password: string;
   name: string;
   createdAt: string;
+  dosha?: {
+    vata: number;
+    pitta: number;
+    kapha: number;
+  };
+  quizCompleted?: boolean;
 }
 
 // Initialize database
@@ -118,5 +124,28 @@ export async function getAllUsers(): Promise<User[]> {
     return getAllUsersFromStorage();
   } catch {
     return [];
+  }
+}
+
+// Save quiz results to user's database
+export async function saveQuizResults(
+  userId: number,
+  dosha: { vata: number; pitta: number; kapha: number }
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const users = await getAllUsersFromStorage();
+    const userIndex = users.findIndex((u) => u.id === userId);
+
+    if (userIndex === -1) {
+      return { success: false, message: 'User not found' };
+    }
+
+    users[userIndex].dosha = dosha;
+    users[userIndex].quizCompleted = true;
+
+    await saveUsersToStorage(users);
+    return { success: true, message: 'Quiz results saved!' };
+  } catch {
+    return { success: false, message: 'Failed to save quiz results' };
   }
 }

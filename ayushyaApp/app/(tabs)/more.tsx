@@ -19,17 +19,14 @@ export default function More({ dosha: _dosha, onLogout }: MoreProps) {
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', onPress: () => {} },
-      {
-        text: 'Logout',
-        onPress: async () => {
-          await logout();
-          onLogout();
-        },
-        style: 'destructive',
-      },
-    ]);
+    console.log('Logout button pressed');
+    // Direct logout without alert
+    logout().then(() => {
+      console.log('User logged out successfully');
+    }).catch((error) => {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to logout. Please try again.');
+    });
   };
 
   const handleViewDatabase = async () => {

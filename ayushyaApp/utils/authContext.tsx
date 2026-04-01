@@ -7,6 +7,12 @@ export interface User {
   id: number;
   email: string;
   name: string;
+  dosha?: {
+    vata: number;
+    pitta: number;
+    kapha: number;
+  };
+  quizCompleted?: boolean;
 }
 
 interface AuthContextType {
@@ -14,6 +20,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (user: User) => Promise<void>;
   logout: () => Promise<void>;
+  updateUserDosha: (dosha: { vata: number; pitta: number; kapha: number }) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +40,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: dbUser.id,
               email: dbUser.email,
               name: dbUser.name,
+              dosha: dbUser.dosha,
+              quizCompleted: dbUser.quizCompleted,
             });
           }
         }
@@ -56,8 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.removeItem('userId');
   };
 
+  const updateUserDosha = (dosha: { vata: number; pitta: number; kapha: number }) => {
+    if (user) {
+      setUser({ ...user, dosha, quizCompleted: true });
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, updateUserDosha }}>
       {children}
     </AuthContext.Provider>
   );
