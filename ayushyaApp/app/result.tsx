@@ -2,7 +2,7 @@
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import DoshaRing from '../components/DoshaRing';
 import { DOSHA_INFO, getDominantDosha } from '../utils/doshaCalc';
-import { useAuth } from '../utils/authContext.tsx';
+import { useAuth } from '../utils/authContext';
 import { saveQuizResults } from '../utils/database';
 
 interface Dosha {

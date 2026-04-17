@@ -80,9 +80,11 @@ export async function registerUser(email: string, password: string, name: string
 
     users.push(newUser);
     await saveUsersToStorage(users);
+    console.log('✅ User registered successfully:', email);
     return { success: true, message: 'Registration successful!' };
   } catch (error: any) {
-    return { success: false, message: 'Registration failed' };
+    console.error('❌ Registration error:', error);
+    return { success: false, message: `Registration failed: ${error?.message || 'Unknown error'}` };
   }
 }
 

@@ -1,7 +1,7 @@
 // app/(tabs)/more.tsx
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FAMILY } from '../../utils/constants';
-import { useAuth } from '../../utils/authContext.tsx';
+import { useAuth } from '../../utils/authContext';
 import { getAllUsers } from '../../utils/database';
 
 interface Dosha {

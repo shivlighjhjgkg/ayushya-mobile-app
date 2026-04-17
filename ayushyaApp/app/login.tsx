@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
 import { loginUser } from '../utils/database';
-import { useAuth } from '../utils/authContext.tsx';
+import { useAuth } from '../utils/authContext';
 
 interface LoginProps {
   onLoginSuccess: () => void;

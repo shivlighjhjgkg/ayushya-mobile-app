@@ -12,7 +12,7 @@ import Quiz from './quiz';
 import Result from './result';
 import Login from './login';
 import Register from './register';
-import { useAuth } from '../utils/authContext.tsx';
+import { useAuth } from '../utils/authContext';
 import { initDatabase } from '../utils/database';
 
 type Screen = 'hero' | 'quiz' | 'result' | 'app' | 'login' | 'register';
