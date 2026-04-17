@@ -1,0 +1,6 @@
+open a terminal 
+>> npm install
+>> npx expo start --clear
+
+currently no backend to this only a database is there for login/logout and storing vata pita kappa scores from the initial questionaire 
+
