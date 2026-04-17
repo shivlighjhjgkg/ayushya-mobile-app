@@ -85,7 +85,7 @@ export default function Dashboard({ dosha, onNav }: DashboardProps) {
 
       {/* Today's Summary */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Today's Summary</Text>
+        <Text style={styles.cardTitle}>Todays Summary</Text>
         <Text style={styles.summaryText}><Text style={styles.summaryBold}>Meals logged:</Text> 2 / 3</Text>
         <Text style={styles.summaryText}><Text style={styles.summaryBold}>Satmya streak:</Text> 5 days</Text>
         <Text style={styles.summaryText}><Text style={styles.summaryBold}>Top food today:</Text> Ghee rice 😊</Text>

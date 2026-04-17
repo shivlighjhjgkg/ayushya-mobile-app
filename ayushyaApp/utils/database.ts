@@ -2,6 +2,15 @@
 import * as bcrypt from 'bcryptjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Set random fallback for bcryptjs in React Native
+bcrypt.setRandomFallback((len: number) => {
+  const randomBytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    randomBytes[i] = Math.floor(Math.random() * 256);
+  }
+  return randomBytes as any;
+});
+
 export interface User {
   id: number;
   email: string;
