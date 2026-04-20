@@ -1,6 +1,8 @@
 // app/result.tsx
+import React, { useState, useEffect } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import DoshaRing from '../components/DoshaRing';
+import CompleteProfile from '../components/CompleteProfile';
 import { DOSHA_INFO, getDominantDosha } from '../utils/doshaCalc';
 import { useAuth } from '../utils/authContext';
 import { saveQuizResults } from '../utils/database';
@@ -17,25 +19,53 @@ interface ResultProps {
 }
 
 export default function Result({ dosha, onContinue }: ResultProps) {
-  const { user, updateUserDosha } = useAuth();
+  const { user, updateUserDosha, token } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
+  const [loading, setLoading] = useState(false);
   const dom = getDominantDosha(dosha);
   const info = DOSHA_INFO[dom];
 
-  const handleContinue = async () => {
-    if (!user) return;
+  // Debug logging on mount
+  useEffect(() => {
+    console.log('🔍 Result Component Mounted');
+    console.log('👤 User:', user ? `${user.name} (${user._id})` : 'No user');
+    console.log('🔑 Token:', token ? `Present (${token.substring(0, 20)}...)` : 'No token');
+    console.log('📊 Dosha:', dosha);
+  }, [user, token, dosha]);
 
+  const handleContinue = async () => {
+    if (!user || !token) {
+      console.error('❌ Missing user or token for quiz save');
+      Alert.alert('Error', 'Not authenticated. Please login again.');
+      return;
+    }
+
+    setLoading(true);
+    console.log('💾 Saving quiz results for user:', user._id);
+    console.log('📊 Dosha scores:', dosha);
+    console.log('🔐 Token available:', !!token);
+    
     // Save quiz results to database
-    const result = await saveQuizResults(user.id, dosha);
+    const result = await saveQuizResults(user._id, dosha, token);
+    console.log('📤 Quiz save response:', result);
+    setLoading(false);
 
     if (result.success) {
+      console.log('✅ Quiz saved successfully');
       // Update the user context
       updateUserDosha(dosha);
-      // Navigate to dashboard
-      onContinue();
+      // Show profile completion form
+      setShowProfile(true);
     } else {
+      console.error('❌ Quiz save failed:', result.message);
       Alert.alert('Error', result.message);
     }
   };
+
+  // If showing profile completion form
+  if (showProfile && user && token) {
+    return <CompleteProfile onDone={onContinue} user={user} token={token} />;
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -67,8 +97,14 @@ export default function Result({ dosha, onContinue }: ResultProps) {
           <Text style={styles.cardText}>{info.text}</Text>
         </View>
 
-        <TouchableOpacity style={styles.btn} onPress={handleContinue}>
-          <Text style={styles.btnText}>Enter Dashboard</Text>
+        <TouchableOpacity 
+          style={[styles.btn, loading && { opacity: 0.6 }]} 
+          onPress={handleContinue}
+          disabled={loading}
+        >
+          <Text style={styles.btnText}>
+            {loading ? 'Saving...' : 'Complete Profile'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

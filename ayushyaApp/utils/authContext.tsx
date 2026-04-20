@@ -1,12 +1,13 @@
 // utils/authContext.tsx
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getUserById } from './database';
+import { validateToken } from './api';
 
 export interface User {
-  id: number;
+  _id: string;
   email: string;
   name: string;
+  createdAt: string;
   dosha?: {
     vata: number;
     pitta: number;
@@ -18,35 +19,54 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (user: User) => Promise<void>;
+  token: string | null;
+  login: (user: User, token: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUserDosha: (dosha: { vata: number; pitta: number; kapha: number }) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Restore session on app startup
   useEffect(() => {
     const bootstrapAsync = async () => {
       try {
-        const savedUserId = await AsyncStorage.getItem('userId');
-        if (savedUserId) {
-          const dbUser = await getUserById(parseInt(savedUserId));
-          if (dbUser) {
+        const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
+        const savedUser = await AsyncStorage.getItem(USER_KEY);
+
+        if (savedToken) {
+          // Validate token with backend
+          const { success, user: apiUser } = await validateToken(savedToken);
+
+          if (success && apiUser) {
+            setToken(savedToken);
             setUser({
-              id: dbUser.id,
-              email: dbUser.email,
-              name: dbUser.name,
-              dosha: dbUser.dosha,
-              quizCompleted: dbUser.quizCompleted,
+              _id: apiUser._id,
+              email: apiUser.email,
+              name: apiUser.name,
+              createdAt: apiUser.createdAt,
             });
+            console.log('✅ Session restored:', apiUser.email);
+          } else {
+            // Token invalid or expired, clear stored data
+            await AsyncStorage.removeItem(TOKEN_KEY);
+            await AsyncStorage.removeItem(USER_KEY);
+            console.log('⚠️ Token validation failed, session cleared');
           }
         }
       } catch (error) {
-        console.error('Auth restore error:', error);
+        console.error('❌ Auth restore error:', error);
+        // Clear potentially corrupted data
+        await AsyncStorage.removeItem(TOKEN_KEY);
+        await AsyncStorage.removeItem(USER_KEY);
       } finally {
         setIsLoading(false);
       }
@@ -55,14 +75,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     bootstrapAsync();
   }, []);
 
-  const login = async (userData: User) => {
+  const login = async (userData: User, authToken: string) => {
     setUser(userData);
-    await AsyncStorage.setItem('userId', userData.id.toString());
+    setToken(authToken);
+
+    // Persist to AsyncStorage for session recovery
+    await AsyncStorage.setItem(TOKEN_KEY, authToken);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
+    console.log('✅ User logged in:', userData.email);
   };
 
   const logout = async () => {
     setUser(null);
-    await AsyncStorage.removeItem('userId');
+    setToken(null);
+
+    // Clear stored session
+    await AsyncStorage.removeItem(TOKEN_KEY);
+    await AsyncStorage.removeItem(USER_KEY);
+    console.log('✅ User logged out');
   };
 
   const updateUserDosha = (dosha: { vata: number; pitta: number; kapha: number }) => {
@@ -72,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, updateUserDosha }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, updateUserDosha }}>
       {children}
     </AuthContext.Provider>
   );

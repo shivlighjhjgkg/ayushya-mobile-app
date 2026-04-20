@@ -16,35 +16,49 @@ export default function Register({ onRegisterSuccess, onSwitchToLogin }: Registe
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
+    console.log('🔘 Register button clicked');
+    
     if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
+      console.log('❌ Missing required fields');
       Alert.alert('❌ Error', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
+      console.log('❌ Passwords do not match');
       Alert.alert('❌ Error', 'Passwords do not match');
       return;
     }
 
     if (password.length < 6) {
+      console.log('❌ Password too short');
       Alert.alert('❌ Error', 'Password must be at least 6 characters');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
+      console.log('❌ Invalid email format');
       Alert.alert('❌ Error', 'Please enter a valid email');
       return;
     }
 
+    console.log('📧 Email:', email);
+    console.log('👤 Name:', name);
+    console.log('🚀 Calling registerUser...');
+    
     setLoading(true);
     const result = await registerUser(email, password, name);
+    
+    console.log('✅ Register result received:', result);
     setLoading(false);
 
     if (result.success) {
+      console.log('🎉 Registration successful');
       Alert.alert('✅ Success', result.message + '\n\nNow please login with your credentials');
       onRegisterSuccess();
     } else {
+      console.log('❌ Registration failed:', result.message);
       Alert.alert('❌ Registration Failed', result.message);
     }
   };

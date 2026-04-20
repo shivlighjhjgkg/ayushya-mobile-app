@@ -16,26 +16,30 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
   const { login } = useAuth();
 
   const handleLogin = async () => {
+    console.log('🔘 Login button clicked');
     if (!email.trim() || !password.trim()) {
+      console.log('❌ Email or password empty');
       Alert.alert('❌ Error', 'Please fill in all fields');
       return;
     }
 
+    console.log('📧 Email:', email);
+    console.log('🔒 Password length:', password.length);
+    console.log('🚀 Calling loginUser...');
+    
     setLoading(true);
     const result = await loginUser(email, password);
+    
+    console.log('✅ Login result received:', result);
     setLoading(false);
 
-    if (result.success && result.user) {
-      await login({
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        dosha: result.user.dosha,
-        quizCompleted: result.user.quizCompleted,
-      });
+    if (result.success && result.user && result.token) {
+      console.log('🎉 Login successful, calling auth context...');
+      await login(result.user, result.token);
       Alert.alert('✅ Success', result.message);
       onLoginSuccess();
     } else {
+      console.log('❌ Login failed:', result.message);
       Alert.alert('❌ Login Failed', result.message);
     }
   };

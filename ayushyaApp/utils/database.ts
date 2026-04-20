@@ -1,20 +1,11 @@
 // utils/database.ts
-import * as bcrypt from 'bcryptjs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// Database functions using MongoDB backend via API
 
-// Set random fallback for bcryptjs in React Native
-bcrypt.setRandomFallback((len: number) => {
-  const randomBytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    randomBytes[i] = Math.floor(Math.random() * 256);
-  }
-  return randomBytes as any;
-});
+import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile } from './api';
 
 export interface User {
-  id: number;
+  _id: string;
   email: string;
-  password: string;
   name: string;
   createdAt: string;
   dosha?: {
@@ -25,138 +16,230 @@ export interface User {
   quizCompleted?: boolean;
 }
 
-// Initialize database
-export async function initDatabase() {
+// ==================== INITIALIZATION ====================
+
+/**
+ * Initialize database (validation check)
+ * With backend, this just verifies API connectivity
+ */
+export async function initDatabase(): Promise<void> {
   try {
-    // Initialize users if doesn't exist
-    const existingUsers = await AsyncStorage.getItem('users_db');
-    if (!existingUsers) {
-      await AsyncStorage.setItem('users_db', JSON.stringify([]));
-    }
-    console.log('✅ Database initialized');
+    console.log('✅ Database initialized - using MongoDB backend');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
   }
 }
 
-// Hash password
-export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
+// ==================== AUTH OPERATIONS ====================
 
-// Compare password
-export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
-
-// Get all users from storage
-async function getAllUsersFromStorage(): Promise<User[]> {
+/**
+ * Register user via API
+ * Password is hashed on the backend
+ */
+export async function registerUser(
+  email: string,
+  password: string,
+  name: string
+): Promise<{ success: boolean; message: string; token?: string; user?: User }> {
   try {
-    const data = await AsyncStorage.getItem('users_db');
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-}
-
-// Save all users to storage
-async function saveUsersToStorage(users: User[]): Promise<void> {
-  try {
-    await AsyncStorage.setItem('users_db', JSON.stringify(users));
-  } catch (error) {
-    console.error('Error saving users:', error);
-  }
-}
-
-// Register user
-export async function registerUser(email: string, password: string, name: string): Promise<{ success: boolean; message: string }> {
-  try {
-    const hashedPassword = await hashPassword(password);
-    const users = await getAllUsersFromStorage();
-
-    if (users.some((u) => u.email === email)) {
-      return { success: false, message: 'Email already registered' };
+    const result = await apiRegisterUser(email, password, name);
+    
+    if (result.success) {
+      console.log('✅ User registered successfully:', email);
+    } else {
+      console.error('❌ Registration error:', result.message);
     }
-
-    const newUser: User = {
-      id: users.length + 1,
-      email,
-      password: hashedPassword,
-      name,
-      createdAt: new Date().toISOString(),
+    
+    return {
+      success: result.success,
+      message: result.message,
+      token: result.token,
+      user: result.user,
     };
-
-    users.push(newUser);
-    await saveUsersToStorage(users);
-    console.log('✅ User registered successfully:', email);
-    return { success: true, message: 'Registration successful!' };
   } catch (error: any) {
     console.error('❌ Registration error:', error);
-    return { success: false, message: `Registration failed: ${error?.message || 'Unknown error'}` };
+    return {
+      success: false,
+      message: `Registration failed: ${error?.message || 'Unknown error'}`,
+    };
   }
 }
 
-// Login user
-export async function loginUser(email: string, password: string): Promise<{ success: boolean; user?: User; message: string }> {
+/**
+ * Login user via API
+ * Returns JWT token for authenticated requests
+ */
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: User; message: string; token?: string }> {
   try {
-    const users = await getAllUsersFromStorage();
-    const user = users.find((u) => u.email === email);
-
-    if (!user) {
-      return { success: false, message: 'Email not found' };
+    const result = await apiLoginUser(email, password);
+    
+    if (result.success && result.user) {
+      const user: User = {
+        _id: result.user._id,
+        email: result.user.email,
+        name: result.user.name,
+        createdAt: new Date().toISOString(),
+      };
+      
+      console.log('✅ Login successful:', email);
+      return {
+        success: true,
+        user,
+        message: 'Login successful!',
+        token: result.token,
+      };
+    } else {
+      return {
+        success: false,
+        message: result.message || 'Login failed',
+      };
     }
-
-    const isPasswordValid = await comparePassword(password, user.password);
-
-    if (!isPasswordValid) {
-      return { success: false, message: 'Invalid password' };
-    }
-
-    return { success: true, user, message: 'Login successful!' };
-  } catch {
-    return { success: false, message: 'Login failed' };
+  } catch (error: any) {
+    console.error('❌ Login error:', error);
+    return {
+      success: false,
+      message: error.message || 'Login failed',
+    };
   }
 }
 
-// Get user by ID
-export async function getUserById(id: number): Promise<User | null> {
+// ==================== USER OPERATIONS ====================
+
+/**
+ * Get user by ID via API
+ * Requires authentication token
+ */
+export async function getUserById(userId: string, token: string): Promise<User | null> {
   try {
-    const users = await getAllUsersFromStorage();
-    return users.find((u) => u.id === id) || null;
-  } catch {
+    const result = await getUserProfile(userId, token);
+    
+    if (result.success && result.user) {
+      return {
+        _id: result.user._id,
+        email: result.user.email,
+        name: result.user.name,
+        createdAt: result.user.createdAt,
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching user:', error);
     return null;
   }
 }
 
-// Get all users (for debugging)
+/**
+ * Get all users (not recommended for frontend - use for admin dashboard only)
+ */
 export async function getAllUsers(): Promise<User[]> {
+  console.warn('⚠️ getAllUsers() is not recommended - this would require admin endpoint');
+  return [];
+}
+
+// ==================== QUIZ/DOSHA OPERATIONS ====================
+
+/**
+ * Save quiz results to user's health profile via API
+ * Creates or updates the dosha scores in MongoDB
+ */
+export async function saveQuizResults(
+  userId: string,
+  dosha: { vata: number; pitta: number; kapha: number },
+  token: string
+): Promise<{ success: boolean; message: string }> {
   try {
-    return getAllUsersFromStorage();
-  } catch {
-    return [];
+    console.log('\n🔍 ==== SAVE QUIZ RESULTS ====');
+    console.log('📊 User ID:', userId);
+    console.log('📈 Dosha Scores:', dosha);
+    console.log('🔑 Token:', token ? `Present (${token.substring(0, 30)}...)` : 'MISSING!');
+    
+    const result = await apiSaveQuizResults(userId, dosha, token);
+    
+    console.log('📤 API Response:', result);
+    
+    if (result.success) {
+      console.log('✅ Quiz results saved for user:', userId);
+    } else {
+      console.error('❌ Error saving quiz results:', result.message);
+    }
+    
+    console.log('🔍 ==== END SAVE QUIZ RESULTS ====\n');
+    
+    return {
+      success: result.success,
+      message: result.message || 'Quiz results saved!',
+    };
+  } catch (error: any) {
+    console.error('❌ Error saving quiz results:', error);
+    console.error('📋 Error details:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+    });
+    return {
+      success: false,
+      message: error.message || 'Failed to save quiz results',
+    };
   }
 }
 
-// Save quiz results to user's database
-export async function saveQuizResults(
-  userId: number,
-  dosha: { vata: number; pitta: number; kapha: number }
+/**
+ * Get user's health profile (includes dosha scores)
+ */
+export async function getQuizResults(
+  userId: string,
+  token: string
+): Promise<{ vata: number; pitta: number; kapha: number } | null> {
+  try {
+    const result = await getHealthProfile(userId, token);
+    
+    if (result.success && result.profile) {
+      return result.profile.doshaScores;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching quiz results:', error);
+    return null;
+  }
+}
+
+/**
+ * Update health profile with allergens, age, BMI, dietary preference
+ */
+export async function updateHealthProfile(
+  userId: string,
+  data: {
+    allergens?: string[];
+    age?: number;
+    bmi?: number;
+    dietaryPreference?: 'vegetarian' | 'non-vegetarian';
+  },
+  token?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const users = await getAllUsersFromStorage();
-    const userIndex = users.findIndex((u) => u.id === userId);
-
-    if (userIndex === -1) {
-      return { success: false, message: 'User not found' };
+    console.log('📝 Updating health profile:', userId);
+    const result = await apiUpdateHealthProfile(userId, data, token || '');
+    
+    if (result.success) {
+      console.log('✅ Health profile updated');
+    } else {
+      console.error('❌ Error updating profile:', result.message);
     }
-
-    users[userIndex].dosha = dosha;
-    users[userIndex].quizCompleted = true;
-
-    await saveUsersToStorage(users);
-    return { success: true, message: 'Quiz results saved!' };
-  } catch {
-    return { success: false, message: 'Failed to save quiz results' };
+    
+    return {
+      success: result.success,
+      message: result.message || 'Profile updated!',
+    };
+  } catch (error: any) {
+    console.error('❌ Error updating health profile:', error);
+    return {
+      success: false,
+      message: error.message || 'Failed to update profile',
+    };
   }
 }
