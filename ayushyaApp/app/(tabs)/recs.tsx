@@ -1,12 +1,25 @@
 // app/(tabs)/recs.tsx
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { WEEKLY_GROCERY, WEEKLY_MEALS } from '../../utils/constants';
+import { useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { WEEKLY_MEALS } from '../../utils/constants';
+import { GROCERY_ITEMS } from '../../utils/groceryItems';
 
 export default function Recs() {
   const [tab, setTab] = useState<'grocery' | 'meals'>('grocery');
   const [checked, setChecked] = useState<Record<number, boolean>>({});
   const [openDay, setOpenDay] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredGroceries = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return GROCERY_ITEMS.reduce((acc, item, index) => {
+      if (!query || item.toLowerCase().includes(query)) {
+        acc.push({ item, index });
+      }
+      return acc;
+    }, [] as { item: string; index: number }[]);
+  }, [searchQuery]);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
@@ -25,19 +38,32 @@ export default function Recs() {
       </View>
 
       {tab === 'grocery' && (
-        <View style={styles.groceryGrid}>
-          {WEEKLY_GROCERY.map((item: string, i: number) => (
+        <View>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search grocery items..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <Text style={styles.searchMeta}>
+            Showing {filteredGroceries.length} of {GROCERY_ITEMS.length} items
+          </Text>
+
+          <View style={styles.groceryGrid}>
+            {filteredGroceries.map(({ item, index }) => (
             <TouchableOpacity
-              key={i}
-              style={[styles.groceryItem, checked[i] && styles.groceryItemChecked]}
-              onPress={() => setChecked((p) => ({ ...p, [i]: !p[i] }))}
+              key={`${index}-${item}`}
+              style={[styles.groceryItem, checked[index] && styles.groceryItemChecked]}
+              onPress={() => setChecked((p) => ({ ...p, [index]: !p[index] }))}
             >
-              <View style={[styles.gCheck, checked[i] && styles.gCheckDone]}>
-                <Text style={styles.gCheckText}>{checked[i] ? '✓' : ''}</Text>
+              <View style={[styles.gCheck, checked[index] && styles.gCheckDone]}>
+                <Text style={styles.gCheckText}>{checked[index] ? '✓' : ''}</Text>
               </View>
-              <Text style={[styles.gName, checked[i] && styles.gNameChecked]}>{item}</Text>
+              <Text style={[styles.gName, checked[index] && styles.gNameChecked]}>{item}</Text>
             </TouchableOpacity>
-          ))}
+            ))}
+          </View>
         </View>
       )}
 
@@ -87,6 +113,8 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#4a9b5f', borderColor: '#4a9b5f' },
   tabBtnText: { fontSize: 14, color: '#666', fontWeight: '600' },
   tabBtnTextActive: { color: '#fff' },
+  searchInput: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a1a', marginBottom: 8 },
+  searchMeta: { fontSize: 12, color: '#666', marginBottom: 12 },
   groceryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   groceryItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, gap: 8, borderWidth: 1.5, borderColor: '#e0e0e0', minWidth: '45%' },
   groceryItemChecked: { backgroundColor: '#f0f7f2', borderColor: '#4a9b5f' },
