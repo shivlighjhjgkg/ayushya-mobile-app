@@ -1,14 +1,18 @@
 // app/(tabs)/recs.tsx
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { WEEKLY_MEALS } from '../../utils/constants';
 import { GROCERY_ITEMS } from '../../utils/groceryItems';
+import { getCurrentWeeklyGroceryList, saveWeeklyGroceryList } from '../../utils/database';
+import { useAuth } from '../../utils/authContext';
 
 export default function Recs() {
+  const { user, token } = useAuth();
   const [tab, setTab] = useState<'grocery' | 'meals'>('grocery');
   const [checked, setChecked] = useState<Record<number, boolean>>({});
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [savingList, setSavingList] = useState(false);
 
   const filteredGroceries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -20,6 +24,58 @@ export default function Recs() {
       return acc;
     }, [] as { item: string; index: number }[]);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const loadSavedGroceryList = async () => {
+      if (!user || !token) {
+        return;
+      }
+
+      const response = await getCurrentWeeklyGroceryList(user._id, token);
+
+      if (!response.success || response.items.length === 0) {
+        return;
+      }
+
+      const selectedSet = new Set(response.items.map((item) => item.toLowerCase()));
+      const initialChecked: Record<number, boolean> = {};
+
+      GROCERY_ITEMS.forEach((item, index) => {
+        if (selectedSet.has(item.toLowerCase())) {
+          initialChecked[index] = true;
+        }
+      });
+
+      setChecked(initialChecked);
+    };
+
+    loadSavedGroceryList();
+  }, [user, token]);
+
+  const handleSaveGroceryList = async () => {
+    if (!user || !token) {
+      Alert.alert('Login required', 'Please login to save your grocery list.');
+      return;
+    }
+
+    const selectedItems = GROCERY_ITEMS.filter((_, index) => checked[index]);
+
+    if (selectedItems.length === 0) {
+      Alert.alert('Nothing selected', 'Select at least one ingredient before saving.');
+      return;
+    }
+
+    setSavingList(true);
+    const response = await saveWeeklyGroceryList(user._id, selectedItems, token);
+    setSavingList(false);
+
+    if (!response.success) {
+      Alert.alert('Save failed', response.message || 'Could not save grocery list.');
+      return;
+    }
+
+    Alert.alert('Saved', 'Your grocery list for this week is saved.');
+  };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
@@ -49,6 +105,14 @@ export default function Recs() {
           <Text style={styles.searchMeta}>
             Showing {filteredGroceries.length} of {GROCERY_ITEMS.length} items
           </Text>
+
+          <TouchableOpacity
+            style={[styles.saveCartBtn, savingList && styles.saveCartBtnDisabled]}
+            onPress={handleSaveGroceryList}
+            disabled={savingList}
+          >
+            <Text style={styles.saveCartText}>{savingList ? 'Saving...' : '🛒 Save this week'}</Text>
+          </TouchableOpacity>
 
           <View style={styles.groceryGrid}>
             {filteredGroceries.map(({ item, index }) => (
@@ -115,6 +179,9 @@ const styles = StyleSheet.create({
   tabBtnTextActive: { color: '#fff' },
   searchInput: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a1a', marginBottom: 8 },
   searchMeta: { fontSize: 12, color: '#666', marginBottom: 12 },
+  saveCartBtn: { alignSelf: 'flex-start', backgroundColor: '#4a9b5f', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  saveCartBtnDisabled: { opacity: 0.6 },
+  saveCartText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   groceryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   groceryItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, gap: 8, borderWidth: 1.5, borderColor: '#e0e0e0', minWidth: '45%' },
   groceryItemChecked: { backgroundColor: '#f0f7f2', borderColor: '#4a9b5f' },

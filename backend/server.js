@@ -7,6 +7,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const healthProfileRoutes = require('./routes/healthProfiles');
 const familyRoutes = require('./routes/family');
+const groceryListRoutes = require('./routes/groceryLists');
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/health/profile', healthProfileRoutes);
 app.use('/api/family', familyRoutes);
+app.use('/api/grocery-lists', groceryListRoutes);
 
 // ==================== ERROR HANDLING ====================
 // 404 handler

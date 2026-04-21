@@ -387,6 +387,16 @@ export interface Family {
   createdAt: string;
 }
 
+export interface GroceryList {
+  _id: string;
+  userId: string;
+  weekStart: string;
+  weekEnd: string;
+  items: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Create a new family
  */
@@ -459,6 +469,57 @@ export async function getFamily(
   } catch {
     return {
       success: false,
+    };
+  }
+}
+
+// ==================== GROCERY LIST ENDPOINTS ====================
+
+/**
+ * Save current week's grocery list for a user
+ */
+export async function saveWeeklyGroceryList(
+  userId: string,
+  items: string[],
+  token: string
+): Promise<{ success: boolean; message: string; groceryList?: GroceryList }> {
+  try {
+    const response = await apiCall<{ success: boolean; message: string; groceryList?: GroceryList }>(
+      `/api/grocery-lists/${userId}`,
+      'POST',
+      { items },
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to save grocery list',
+    };
+  }
+}
+
+/**
+ * Get current week's grocery list for a user
+ */
+export async function getCurrentWeeklyGroceryList(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; groceryList?: GroceryList | null; message?: string }> {
+  try {
+    const response = await apiCall<{ success: boolean; groceryList?: GroceryList | null; message?: string }>(
+      `/api/grocery-lists/${userId}/current`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch grocery list',
     };
   }
 }
