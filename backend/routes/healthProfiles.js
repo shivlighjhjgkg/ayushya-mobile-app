@@ -231,12 +231,12 @@ router.get('/:userId', async (req, res) => {
 });
 
 // @route   PUT /api/health-profiles/:userId
-// @desc    Update health profile (allergens, age, BMI, dietary preference)
+// @desc    Update health profile (allergens, age, BMI, dietary preference, desha, season)
 // @access  Private
 router.put('/:userId', async (req, res) => {
   try {
     console.log('📝 Updating health profile:', req.params.userId);
-    const { allergens, age, bmi, dietaryPreference } = req.body;
+    const { allergens, dateOfBirth, age, bmi, dietaryPreference, desha, season } = req.body;
 
     const profile = await HealthProfile.findOne({ userId: req.params.userId });
 
@@ -253,6 +253,10 @@ router.put('/:userId', async (req, res) => {
       console.log('✅ Updating allergens:', allergens);
       profile.allergens = allergens;
     }
+    if (dateOfBirth !== undefined) {
+      console.log('✅ Updating dateOfBirth:', dateOfBirth);
+      profile.dateOfBirth = dateOfBirth;
+    }
     if (age !== undefined) {
       console.log('✅ Updating age:', age);
       profile.age = age;
@@ -265,6 +269,14 @@ router.put('/:userId', async (req, res) => {
       console.log('✅ Updating dietary preference:', dietaryPreference);
       profile.dietaryPreference = dietaryPreference;
     }
+    if (desha !== undefined) {
+      console.log('✅ Updating desha (region):', desha);
+      profile.desha = desha;
+    }
+    if (season !== undefined) {
+      console.log('✅ Updating season:', season);
+      profile.season = season;
+    }
 
     profile.updatedAt = new Date();
     await profile.save();
@@ -272,9 +284,12 @@ router.put('/:userId', async (req, res) => {
     console.log('✅ Profile updated');
     console.log('📦 Updated fields:', {
       allergens: profile.allergens,
+      dateOfBirth: profile.dateOfBirth,
       age: profile.age,
       bmi: profile.bmi,
       dietaryPreference: profile.dietaryPreference,
+      desha: profile.desha,
+      season: profile.season,
     });
     console.log('📍 Collection: health_profiles');
     res.status(200).json({

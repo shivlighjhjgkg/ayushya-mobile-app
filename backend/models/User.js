@@ -50,4 +50,15 @@ UserSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password_hash);
 };
 
+// Cascade delete: Remove health profile when user is deleted
+UserSchema.pre('findOneAndDelete', async function (next) {
+  const filter = this.getFilter();
+  const userId = filter._id;
+  const HealthProfile = require('./HealthProfile');
+  console.log(`🗑️ Cascade deleting health profile for user ${userId}`);
+  const result = await HealthProfile.deleteOne({ userId });
+  console.log(`✅ Deleted ${result.deletedCount} health profile(s)`);
+  next();
+});
+
 module.exports = mongoose.model('User', UserSchema);

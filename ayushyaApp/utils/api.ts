@@ -51,6 +51,7 @@ export interface AuthResponse {
     _id: string;
     name: string;
     email: string;
+    created_at?: string;
   };
 }
 
@@ -58,7 +59,7 @@ export interface User {
   _id: string;
   name: string;
   email: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface HealthProfile {
@@ -71,9 +72,12 @@ export interface HealthProfile {
   dominantDosha: 'vata' | 'pitta' | 'kapha';
   quizCompleted: boolean;
   allergens?: string[];
+  dateOfBirth?: string;
   age?: number;
   bmi?: number;
   dietaryPreference?: 'vegetarian' | 'non-vegetarian';
+  desha?: string;
+  season?: string;
 }
 
 // Helper function for API calls with error handling

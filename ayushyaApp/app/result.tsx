@@ -52,9 +52,8 @@ export default function Result({ dosha, onContinue }: ResultProps) {
 
     if (result.success) {
       console.log('✅ Quiz saved successfully');
-      // Update the user context
-      updateUserDosha(dosha);
-      // Show profile completion form
+      // Don't update user context yet - wait until profile form completes
+      // This keeps the form visible instead of skipping to dashboard
       setShowProfile(true);
     } else {
       console.error('❌ Quiz save failed:', result.message);
@@ -64,7 +63,7 @@ export default function Result({ dosha, onContinue }: ResultProps) {
 
   // If showing profile completion form
   if (showProfile && user && token) {
-    return <CompleteProfile onDone={onContinue} user={user} token={token} />;
+    return <CompleteProfile onDone={onContinue} user={user} token={token} dosha={dosha} />;
   }
 
   return (

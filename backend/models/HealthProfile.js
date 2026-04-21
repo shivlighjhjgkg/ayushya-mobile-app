@@ -31,6 +31,10 @@ const HealthProfileSchema = new mongoose.Schema(
       default: [],
     },
 
+    dateOfBirth: {
+      type: Date,
+    },
+
     age: {
       type: Number,
       min: 0,
@@ -45,6 +49,16 @@ const HealthProfileSchema = new mongoose.Schema(
     dietaryPreference: {
       type: String,
       enum: ['vegetarian', 'non-vegetarian'],
+    },
+
+    desha: {
+      type: String,
+      enum: ['north', 'east', 'west', 'south', 'global'],
+    },
+
+    season: {
+      type: String,
+      enum: ['summer', 'winter'],
     },
 
     updatedAt: {

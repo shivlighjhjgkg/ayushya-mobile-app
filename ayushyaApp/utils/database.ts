@@ -209,15 +209,18 @@ export async function getQuizResults(
 }
 
 /**
- * Update health profile with allergens, age, BMI, dietary preference
+ * Update health profile with additional health information
  */
 export async function updateHealthProfile(
   userId: string,
   data: {
     allergens?: string[];
+    dateOfBirth?: string;
     age?: number;
     bmi?: number;
     dietaryPreference?: 'vegetarian' | 'non-vegetarian';
+    desha?: string;
+    season?: string;
   },
   token?: string
 ): Promise<{ success: boolean; message: string }> {

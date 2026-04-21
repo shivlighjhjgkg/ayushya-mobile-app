@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert, CheckBox } from 'react-native';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
 import { useAuth } from '../utils/authContext';
 import { updateHealthProfile } from '../utils/database';
 
@@ -7,6 +7,7 @@ interface CompleteProfileProps {
   onDone: () => void;
   user?: { _id: string };
   token?: string;
+  dosha?: { vata: number; pitta: number; kapha: number };
 }
 
 const ALLERGEN_OPTIONS = [
@@ -20,15 +21,52 @@ const ALLERGEN_OPTIONS = [
   'Fish',
 ];
 
-export default function CompleteProfile({ onDone, user: propUser, token: propToken }: CompleteProfileProps) {
+const REGION_OPTIONS = [
+  { label: 'North India', value: 'north' },
+  { label: 'East India', value: 'east' },
+  { label: 'West India', value: 'west' },
+  { label: 'South India', value: 'south' },
+  { label: 'Global', value: 'global' },
+];
+
+const SEASON_OPTIONS = [
+  { label: 'Summer', value: 'summer' },
+  { label: 'Winter', value: 'winter' },
+];
+
+export default function CompleteProfile({ onDone, user: propUser, token: propToken, dosha }: CompleteProfileProps) {
   const authContext = useAuth();
   const user = propUser || authContext.user;
   const token = propToken || authContext.token;
+  const { updateUserDosha } = useAuth();
+  
   const [selectedAllergens, setSelectedAllergens] = useState<Set<string>>(new Set());
-  const [age, setAge] = useState('');
+  const [dob, setDob] = useState('');
+  const [age, setAge] = useState<number | null>(null);
   const [bmi, setBmi] = useState('');
   const [dietaryPreference, setDietaryPreference] = useState<'vegetarian' | 'non-vegetarian' | null>(null);
+  const [region, setRegion] = useState<string | null>(null);
+  const [season, setSeason] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Calculate age from DOB
+  const handleDobChange = (text: string) => {
+    setDob(text);
+    if (text.length === 10) { // YYYY-MM-DD format
+      const dobDate = new Date(text);
+      if (!isNaN(dobDate.getTime())) {
+        const today = new Date();
+        const calculatedAge = today.getFullYear() - dobDate.getFullYear();
+        const monthDiff = today.getMonth() - dobDate.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+          setAge(calculatedAge - 1);
+        } else {
+          setAge(calculatedAge);
+        }
+      }
+    }
+  };
 
   const toggleAllergen = (allergen: string) => {
     const newSet = new Set(selectedAllergens);
@@ -53,15 +91,22 @@ export default function CompleteProfile({ onDone, user: propUser, token: propTok
 
     const result = await updateHealthProfile(user._id, {
       allergens: Array.from(selectedAllergens),
-      age: age ? parseInt(age) : undefined,
+      dateOfBirth: dob ? new Date(dob).toISOString() : undefined,
+      age: age || undefined,
       bmi: bmi ? parseFloat(bmi) : undefined,
       dietaryPreference: dietaryPreference || undefined,
+      desha: region || undefined,
+      season: season || undefined,
     }, token);
 
     setLoading(false);
 
     if (result.success) {
       console.log('\u2705 Profile updated successfully');
+      // Mark quiz as complete now that profile form is done
+      if (dosha) {
+        updateUserDosha(dosha);
+      }
       Alert.alert('✅ Success', 'Profile completed successfully!');
       onDone();
     } else {
@@ -79,7 +124,13 @@ export default function CompleteProfile({ onDone, user: propUser, token: propTok
         { text: 'Cancel', onPress: () => console.log('\u274c Skip cancelled') },
         {
           text: 'Skip',
-          onPress: onDone,
+          onPress: () => {
+            // Mark quiz as complete even if skipping profile
+            if (dosha) {
+              updateUserDosha(dosha);
+            }
+            onDone();
+          },
           style: 'destructive',
         },
       ]
@@ -154,32 +205,95 @@ export default function CompleteProfile({ onDone, user: propUser, token: propTok
           </View>
         </View>
 
-        {/* Age Section */}
+        {/* Date of Birth Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Age</Text>
-          <Text style={styles.sectionDescription}>Optional - helps personalize recommendations</Text>
+          <Text style={styles.sectionTitle}>Date of Birth</Text>
+          <Text style={styles.sectionDescription}>Your age will be calculated automatically</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your age"
-            value={age}
-            onChangeText={setAge}
-            keyboardType="number-pad"
+            placeholder="YYYY-MM-DD"
+            value={dob}
+            onChangeText={handleDobChange}
             placeholderTextColor="#aaa"
           />
+          {age !== null && (
+            <Text style={styles.ageDisplay}>Age: {age} years</Text>
+          )}
         </View>
 
         {/* BMI Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>BMI</Text>
-          <Text style={styles.sectionDescription}>Optional - your Body Mass Index</Text>
+          <Text style={styles.sectionTitle}>BMI (Body Mass Index)</Text>
+          <Text style={styles.sectionDescription}>Optional - helps with personalization</Text>
+          <Text style={styles.formulaText}>Formula: BMI = Weight (kg) / Height² (m²)</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter your BMI"
+            placeholder="e.g., 22.5"
             value={bmi}
-            onChangeText={setBmi}
+            onChangeText={(text) => {
+              // Only allow numbers and decimal point
+              const filtered = text.replace(/[^0-9.]/g, '');
+              // Ensure only one decimal point
+              const parts = filtered.split('.');
+              if (parts.length > 2) {
+                setBmi(parts[0] + '.' + parts[1]);
+              } else {
+                setBmi(filtered);
+              }
+            }}
             keyboardType="decimal-pad"
             placeholderTextColor="#aaa"
           />
+        </View>
+
+        {/* Desha (Region) Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Desha (Region)</Text>
+          <Text style={styles.sectionDescription}>Your current region of residence</Text>
+          <View style={styles.optionsGroup}>
+            {REGION_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.dropdownOption,
+                  region === option.value && styles.dropdownOptionSelected,
+                ]}
+                onPress={() => setRegion(option.value)}
+              >
+                <View style={[styles.checkBox, region === option.value && styles.checkBoxSelected]}>
+                  {region === option.value && <Text style={styles.checkMark}>✓</Text>}
+                </View>
+                <Text style={[styles.optionText, region === option.value && styles.optionTextSelected]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Season Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Current Season</Text>
+          <Text style={styles.sectionDescription}>Affects your personalized recommendations</Text>
+          <View style={styles.optionsGroup}>
+            {SEASON_OPTIONS.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.dropdownOption,
+                  season === option.value && styles.dropdownOptionSelected,
+                ]}
+                onPress={() => setSeason(option.value)}
+              >
+                <View style={[styles.checkBox, season === option.value && styles.checkBoxSelected]}>
+                  {season === option.value && <Text style={styles.checkMark}>✓</Text>}
+                </View>
+                <Text style={[styles.optionText, season === option.value && styles.optionTextSelected]}>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         {/* Buttons */}
@@ -277,6 +391,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fff',
     color: '#333',
+  },
+  ageDisplay: {
+    fontSize: 13,
+    color: '#2d6a4f',
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  formulaText: {
+    fontSize: 11,
+    color: '#666',
+    fontStyle: 'italic',
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: '#f0f7f3',
+    borderRadius: 4,
+  },
+  optionsGroup: {
+    gap: 8,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+  },
+  dropdownOptionSelected: {
+    backgroundColor: '#f0f7f3',
+    borderColor: '#2d6a4f',
+  },
+  checkBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  checkBoxSelected: {
+    backgroundColor: '#2d6a4f',
+    borderColor: '#2d6a4f',
+  },
+  checkMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  optionTextSelected: {
+    color: '#2d6a4f',
+    fontWeight: '600',
   },
   buttonGroup: {
     marginTop: 20,

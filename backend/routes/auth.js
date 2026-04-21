@@ -201,4 +201,54 @@ router.post('/logout', (req, res) => {
   });
 });
 
+// @route   DELETE /api/auth/user/:userId
+// @desc    Delete user account and associated health profile
+// @access  Private
+router.delete('/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Verify token matches userId (simple security check)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided',
+      });
+    }
+
+    const token = authHeader.substring(7);
+    const tokenUserId = token.split('_')[0];
+
+    if (tokenUserId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized - token does not match userId',
+      });
+    }
+
+    // Delete user (cascade delete will remove health profile)
+    const user = await User.findByIdAndDelete(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    console.log(`✅ User ${userId} and associated health profile deleted`);
+    res.status(200).json({
+      success: true,
+      message: 'User account and profile deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete user',
+    });
+  }
+});
+
 module.exports = router;
