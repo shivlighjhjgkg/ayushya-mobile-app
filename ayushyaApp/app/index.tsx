@@ -86,7 +86,7 @@ export default function Index() {
       case 'dash':    return <Dashboard dosha={dosha} onNav={(t: string) => setTab(t as Tab)} />;
       case 'recs':    return <Recs />;
       case 'satmya':  return <Satmya />;
-      case 'pairing': return <Pairing />;
+      case 'pairing': return <Pairing dosha={dosha} />;
       case 'aqi':     return <AQI />;
       case 'family':  return <Family />;
       case 'more':    return <More dosha={dosha} onLogout={() => setScreen('login')} />;
