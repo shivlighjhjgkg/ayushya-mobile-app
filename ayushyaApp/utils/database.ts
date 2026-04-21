@@ -7,7 +7,7 @@ export interface User {
   _id: string;
   email: string;
   name: string;
-  createdAt: string;
+  createdAt?: string;
   dosha?: {
     vata: number;
     pitta: number;
@@ -226,6 +226,7 @@ export async function updateHealthProfile(
 ): Promise<{ success: boolean; message: string }> {
   try {
     console.log('📝 Updating health profile:', userId);
+    console.log('📦 Data being sent to API:', JSON.stringify(data, null, 2));
     const result = await apiUpdateHealthProfile(userId, data, token || '');
     
     if (result.success) {

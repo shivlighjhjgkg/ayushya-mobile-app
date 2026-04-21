@@ -33,14 +33,14 @@ export default function More({ dosha: _dosha, onLogout }: MoreProps) {
     try {
       const users = await getAllUsers();
       const dbContent = users
-        .map((u) => `📧 ${u.email}\n   Name: ${u.name}\n   ID: ${u.id}`)
+        .map((u) => `📧 ${u.email}\n   Name: ${u.name}\n   ID: ${u._id}`)
         .join('\n\n');
       Alert.alert(
         '📊 Database Users',
         dbContent || 'No users registered yet',
         [{ text: 'Close' }]
       );
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to load database');
     }
   };

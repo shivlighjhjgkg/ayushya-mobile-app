@@ -236,7 +236,17 @@ router.get('/:userId', async (req, res) => {
 router.put('/:userId', async (req, res) => {
   try {
     console.log('📝 Updating health profile:', req.params.userId);
+    console.log('🔍 Full request body:', JSON.stringify(req.body, null, 2));
     const { allergens, dateOfBirth, age, bmi, dietaryPreference, desha, season } = req.body;
+    console.log('📋 Destructured values:', {
+      allergens,
+      dateOfBirth,
+      age,
+      bmi,
+      dietaryPreference,
+      desha,
+      season
+    });
 
     const profile = await HealthProfile.findOne({ userId: req.params.userId });
 

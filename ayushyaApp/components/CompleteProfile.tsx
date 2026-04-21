@@ -88,6 +88,15 @@ export default function CompleteProfile({ onDone, user: propUser, token: propTok
     setLoading(true);
     console.log('💾 Updating health profile for user:', user._id);
     console.log('🔐 Token available:', !!token);
+    console.log('📋 Form data before send:', {
+      dob,
+      age,
+      bmi,
+      region,
+      season,
+      selectedAllergens: Array.from(selectedAllergens),
+      dietaryPreference,
+    });
 
     const result = await updateHealthProfile(user._id, {
       allergens: Array.from(selectedAllergens),

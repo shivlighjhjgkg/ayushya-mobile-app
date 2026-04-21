@@ -1,7 +1,7 @@
 // utils/authContext.tsx
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { validateToken } from './api';
+import { validateToken, getHealthProfile } from './api';
 
 export interface User {
   _id: string;
@@ -40,21 +40,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const bootstrapAsync = async () => {
       try {
         const savedToken = await AsyncStorage.getItem(TOKEN_KEY);
-        const savedUser = await AsyncStorage.getItem(USER_KEY);
 
         if (savedToken) {
           // Validate token with backend
           const { success, user: apiUser } = await validateToken(savedToken);
 
           if (success && apiUser) {
-            setToken(savedToken);
-            setUser({
+            // Fetch health profile to get quizCompleted status
+            const healthProfileResponse = await getHealthProfile(apiUser._id, savedToken);
+            
+            const userData: User = {
               _id: apiUser._id,
               email: apiUser.email,
               name: apiUser.name,
-              createdAt: apiUser.createdAt,
-            });
-            console.log('✅ Session restored:', apiUser.email);
+              createdAt: apiUser.createdAt || new Date().toISOString(),
+              quizCompleted: healthProfileResponse?.profile?.quizCompleted || false,
+            };
+
+            // If health profile has dosha scores, add them
+            if (healthProfileResponse?.profile?.doshaScores) {
+              userData.dosha = healthProfileResponse.profile.doshaScores;
+            }
+
+            setToken(savedToken);
+            setUser(userData);
+            console.log('✅ Session restored:', apiUser.email, '- quizCompleted:', userData.quizCompleted);
           } else {
             // Token invalid or expired, clear stored data
             await AsyncStorage.removeItem(TOKEN_KEY);
@@ -82,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Persist to AsyncStorage for session recovery
     await AsyncStorage.setItem(TOKEN_KEY, authToken);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(userData));
-    console.log('✅ User logged in:', userData.email);
+    console.log('✅ User logged in:', userData.email, '- quizCompleted:', userData.quizCompleted);
   };
 
   const logout = async () => {
