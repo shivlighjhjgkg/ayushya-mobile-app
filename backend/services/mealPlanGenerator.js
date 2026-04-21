@@ -280,14 +280,41 @@ function ingredientMatchInfo(meal, groceryItems) {
   };
 }
 
-function scoreMeal(meal, profile, matchCount, slot) {
-  const dosha = profile?.doshaScores || { vata: 0, pitta: 0, kapha: 0 };
+function getEncodedDoshaVector(doshaScores) {
+  const safeScores = {
+    vata: Number(doshaScores?.vata || 0),
+    pitta: Number(doshaScores?.pitta || 0),
+    kapha: Number(doshaScores?.kapha || 0),
+  };
 
-  const doshaScore =
-    -1 *
-    (Number(dosha.vata || 0) * meal.doshaImpact.vata +
-      Number(dosha.pitta || 0) * meal.doshaImpact.pitta +
-      Number(dosha.kapha || 0) * meal.doshaImpact.kapha);
+  const values = Object.entries(safeScores);
+  const maxValue = Math.max(...values.map(([, value]) => value));
+  const minValue = Math.min(...values.map(([, value]) => value));
+
+  if (maxValue === minValue) {
+    return { vata: 0, pitta: 0, kapha: 0 };
+  }
+
+  const maxKeys = values.filter(([, value]) => value === maxValue).map(([key]) => key);
+  const minKeys = values.filter(([, value]) => value === minValue).map(([key]) => key);
+
+  return {
+    vata: maxKeys.includes('vata') ? 1 : minKeys.includes('vata') ? -1 : 0,
+    pitta: maxKeys.includes('pitta') ? 1 : minKeys.includes('pitta') ? -1 : 0,
+    kapha: maxKeys.includes('kapha') ? 1 : minKeys.includes('kapha') ? -1 : 0,
+  };
+}
+
+function doshaCompatibilityScore(meal, encodedDosha) {
+  return -1 * (
+    encodedDosha.vata * meal.doshaImpact.vata +
+    encodedDosha.pitta * meal.doshaImpact.pitta +
+    encodedDosha.kapha * meal.doshaImpact.kapha
+  );
+}
+
+function scoreMeal(meal, encodedDosha, matchCount, slot) {
+  const doshaScore = doshaCompatibilityScore(meal, encodedDosha);
 
   let digestibilityScore = 0;
   if (slot === 'lunchMain') {
@@ -308,15 +335,17 @@ function isDigestibilityAllowed(slot, meal) {
 }
 
 function chooseMeal(candidates, profile, usedMeals, slot) {
+  const encodedDosha = getEncodedDoshaVector(profile?.doshaScores);
   const available = candidates.filter((meal) => !usedMeals.has(meal.normalizedName));
+  const pool = available.length > 0 ? available : candidates;
 
-  if (available.length === 0) {
+  if (pool.length === 0) {
     return null;
   }
 
-  const scored = available
+  const scored = pool
     .map((meal) => {
-      const score = scoreMeal(meal, profile, meal.matchedIngredients.length, slot);
+      const score = scoreMeal(meal, encodedDosha, meal.matchedIngredients.length, slot);
       return { meal, score };
     })
     .sort((a, b) => b.score - a.score);
@@ -419,11 +448,15 @@ async function generateRecommendedGroceryItems(profile, userId, limit = 40) {
 
   const userDesha = profile.desha || profile.region;
   const byRegion = partitionByRegion(filteredMeals, userDesha);
+  const encodedDosha = getEncodedDoshaVector(profile?.doshaScores);
 
   const scoreMap = new Map();
 
   const ingestMeals = (meals, regionWeight) => {
     for (const meal of meals) {
+      const doshaScore = doshaCompatibilityScore(meal, encodedDosha);
+      const doshaWeight = Math.max(0, doshaScore + 2);
+
       for (const ingredient of meal.ingredients || []) {
         const matched = matchIngredientToGroceryItem(ingredient);
         if (!matched) {
@@ -436,7 +469,7 @@ async function generateRecommendedGroceryItems(profile, userId, limit = 40) {
         }
 
         const prev = scoreMap.get(key) || { name: matched, score: 0 };
-        prev.score += regionWeight;
+        prev.score += regionWeight + doshaWeight;
         scoreMap.set(key, prev);
       }
     }
@@ -477,15 +510,15 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
   const dessertEffective = [...dessertByRegion.primary, ...dessertByRegion.fallbackMixed];
 
   if (
-    breakfastEffective.length < 7 ||
-    mainsEffective.length < 14 ||
-    sideEffective.length < 14 ||
-    appetizerEffective.length < 7 ||
-    dessertEffective.length < 7
+    breakfastEffective.length === 0 ||
+    mainsEffective.length === 0 ||
+    sideEffective.length === 0 ||
+    appetizerEffective.length === 0 ||
+    dessertEffective.length === 0
   ) {
     return {
       success: false,
-      message: 'Not enough meals after applying filters. Try broadening grocery list or constraints.',
+      message: 'No valid meals available for one or more required meal slots after applying filters.',
       blockedMeals: Array.from(blockedMeals),
     };
   }
