@@ -58,6 +58,8 @@ router.get('/:userId/current-week', async (req, res) => {
     const { weekStart, weekEnd } = getWeekRange();
     const refresh = String(req.query.refresh || 'false').toLowerCase() === 'true';
 
+    let existingPlan = null;
+
     if (!refresh) {
       const existingPlan = await WeeklyMealPlan.findOne({
         userId: req.params.userId,
@@ -71,6 +73,11 @@ router.get('/:userId/current-week', async (req, res) => {
           source: 'cached',
         });
       }
+    } else {
+      existingPlan = await WeeklyMealPlan.findOne({
+        userId: req.params.userId,
+        weekStart,
+      });
     }
 
     const profile = await HealthProfile.findOne({ userId: req.params.userId });
@@ -91,7 +98,24 @@ router.get('/:userId/current-week', async (req, res) => {
       });
     }
 
-    const generated = await generateWeeklyMealPlan(profile, groceryList.items, req.params.userId);
+    const previousPlanMeals = existingPlan
+      ? (existingPlan.days || []).flatMap((day) => [
+          day?.breakfast?.name,
+          day?.lunchMain?.name,
+          day?.lunchSide?.name,
+          day?.dinnerMain?.name,
+          day?.dinnerSide?.name,
+          day?.appetizer?.name,
+          day?.dessert?.name,
+        ])
+      : [];
+
+    const generated = await generateWeeklyMealPlan(
+      profile,
+      groceryList.items,
+      req.params.userId,
+      previousPlanMeals
+    );
 
     if (!generated.success) {
       return res.status(400).json({

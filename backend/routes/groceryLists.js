@@ -101,7 +101,9 @@ router.get('/:userId/recommended', async (req, res) => {
       });
     }
 
-    const items = await generateRecommendedGroceryItems(profile, req.params.userId, 35);
+    const requestedLimit = Number(req.query.limit || 60);
+    const limit = Math.min(Math.max(requestedLimit, 35), 120);
+    const items = await generateRecommendedGroceryItems(profile, req.params.userId, limit);
 
     return res.json({
       success: true,

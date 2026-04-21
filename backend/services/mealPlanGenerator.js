@@ -9,6 +9,39 @@ const GROCERY_SOURCE_PATH = path.join(__dirname, '..', '..', 'ayushyaApp', 'data
 let cachedMeals = null;
 let cachedGroceryUniverse = null;
 
+function shuffleArray(items) {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function pickWeightedRandom(items, weightSelector) {
+  if (!items.length) return null;
+
+  const weighted = items.map((item) => ({
+    item,
+    weight: Math.max(0.0001, Number(weightSelector(item) || 0)),
+  }));
+
+  const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  if (total <= 0) {
+    return items[Math.floor(Math.random() * items.length)];
+  }
+
+  let roll = Math.random() * total;
+  for (const entry of weighted) {
+    roll -= entry.weight;
+    if (roll <= 0) {
+      return entry.item;
+    }
+  }
+
+  return weighted[weighted.length - 1].item;
+}
+
 function normalizeText(value) {
   return String(value || '')
     .toLowerCase()
@@ -145,17 +178,55 @@ async function getBlockedMealsByFeedback(userId) {
   }
 
   const unwellWords = new Set(['bad', 'unwell', 'didnt suit', 'didn t suit', 'poor']);
-  const blocked = new Set();
+  const blocked = [];
 
   for (const [mealName, feelings] of mealMap.entries()) {
     const badCount = feelings.filter((feeling) => unwellWords.has(feeling)).length;
 
     if (badCount >= 3) {
-      blocked.add(mealName);
+      blocked.push(mealName);
     }
   }
 
   return blocked;
+}
+
+function tokenize(text) {
+  return normalizeText(text)
+    .split(' ')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t) => t.length > 2);
+}
+
+function overlapScore(aTokens, bTokens) {
+  if (aTokens.length === 0 || bTokens.length === 0) {
+    return 0;
+  }
+
+  const bSet = new Set(bTokens);
+  const overlap = aTokens.filter((t) => bSet.has(t)).length;
+  return overlap / Math.min(aTokens.length, bTokens.length);
+}
+
+function isMealBlocked(meal, blockedPatterns) {
+  if (!blockedPatterns || blockedPatterns.length === 0) {
+    return false;
+  }
+
+  const mealName = meal.normalizedName;
+  const mealTokens = tokenize(mealName);
+
+  return blockedPatterns.some((pattern) => {
+    if (!pattern) return false;
+
+    if (mealName === pattern) return true;
+    if (mealName.includes(pattern) || pattern.includes(mealName)) return true;
+
+    const patternTokens = tokenize(pattern);
+    const score = overlapScore(mealTokens, patternTokens);
+    return score >= 0.67 && Math.min(mealTokens.length, patternTokens.length) >= 2;
+  });
 }
 
 function isAgeSuitable(meal, age) {
@@ -334,7 +405,7 @@ function isDigestibilityAllowed(slot, meal) {
   return true;
 }
 
-function chooseMeal(candidates, profile, usedMeals, slot) {
+function chooseMeal(candidates, profile, usedMeals, slot, previousPlanMeals = new Set()) {
   const encodedDosha = getEncodedDoshaVector(profile?.doshaScores);
   const available = candidates.filter((meal) => !usedMeals.has(meal.normalizedName));
   const pool = available.length > 0 ? available : candidates;
@@ -345,30 +416,40 @@ function chooseMeal(candidates, profile, usedMeals, slot) {
 
   const scored = pool
     .map((meal) => {
-      const score = scoreMeal(meal, encodedDosha, meal.matchedIngredients.length, slot);
+      const noveltyPenalty = previousPlanMeals.has(meal.normalizedName) ? 3 : 0;
+      const score = scoreMeal(meal, encodedDosha, meal.matchedIngredients.length, slot) - noveltyPenalty;
       return { meal, score };
     })
     .sort((a, b) => b.score - a.score);
 
-  const selected = scored[0].meal;
+  const topPool = scored.slice(0, Math.min(5, scored.length));
+  const selected = pickWeightedRandom(topPool, (entry) => entry.score + 6).meal;
   usedMeals.add(selected.normalizedName);
   return selected;
 }
 
-function chooseMealWithRegionPriority(primaryCandidates, mixedCandidates, otherCandidates, profile, usedMeals, slot) {
-  const fromPrimary = chooseMeal(primaryCandidates, profile, usedMeals, slot);
+function chooseMealWithRegionPriority(
+  primaryCandidates,
+  mixedCandidates,
+  otherCandidates,
+  profile,
+  usedMeals,
+  slot,
+  previousPlanMeals = new Set()
+) {
+  const fromPrimary = chooseMeal(primaryCandidates, profile, usedMeals, slot, previousPlanMeals);
 
   if (fromPrimary) {
     return fromPrimary;
   }
 
-  const fromMixed = chooseMeal(mixedCandidates, profile, usedMeals, slot);
+  const fromMixed = chooseMeal(mixedCandidates, profile, usedMeals, slot, previousPlanMeals);
 
   if (fromMixed) {
     return fromMixed;
   }
 
-  return chooseMeal(otherCandidates, profile, usedMeals, slot);
+  return chooseMeal(otherCandidates, profile, usedMeals, slot, previousPlanMeals);
 }
 
 function toMealChoice(meal) {
@@ -388,7 +469,7 @@ function toMealChoice(meal) {
 
 function filterMealsForUser(meals, profile, groceryItems, blockedMeals) {
   return meals
-    .filter((meal) => !blockedMeals.has(meal.normalizedName))
+    .filter((meal) => !isMealBlocked(meal, blockedMeals))
     .filter((meal) => isAgeSuitable(meal, profile.age))
     .filter((meal) => isDietaryCompatible(meal, profile.dietaryPreference))
     .filter((meal) => isSeasonCompatible(meal, profile.season))
@@ -411,7 +492,7 @@ function byCourse(meals, courseSet) {
 
 function filterMealsForProfile(meals, profile, blockedMeals) {
   return meals
-    .filter((meal) => !blockedMeals.has(meal.normalizedName))
+    .filter((meal) => !isMealBlocked(meal, blockedMeals))
     .filter((meal) => isAgeSuitable(meal, profile.age))
     .filter((meal) => isDietaryCompatible(meal, profile.dietaryPreference))
     .filter((meal) => isSeasonCompatible(meal, profile.season))
@@ -447,7 +528,7 @@ function matchIngredientToGroceryItem(rawIngredient) {
   return candidates[0].raw;
 }
 
-async function generateRecommendedGroceryItems(profile, userId, limit = 40) {
+async function generateRecommendedGroceryItems(profile, userId, limit = 60) {
   const allMeals = loadMealsFromDataset();
   const blockedMeals = await getBlockedMealsByFeedback(userId);
   const filteredMeals = filterMealsForProfile(allMeals, profile, blockedMeals);
@@ -484,15 +565,26 @@ async function generateRecommendedGroceryItems(profile, userId, limit = 40) {
   ingestMeals(byRegion.primary, 2);
   ingestMeals(byRegion.fallbackMixed, 1);
 
-  return Array.from(scoreMap.values())
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.name);
+  const ranked = Array.from(scoreMap.values()).sort((a, b) => b.score - a.score);
+  const candidatePool = ranked.slice(0, Math.min(240, ranked.length));
+
+  const dynamicTarget = Math.max(35, Math.min(limit, 45 + Math.floor(Math.random() * 26)));
+  const selected = [];
+  let mutablePool = [...candidatePool];
+
+  while (selected.length < dynamicTarget && mutablePool.length > 0) {
+    const picked = pickWeightedRandom(mutablePool, (entry) => entry.score + 1);
+    selected.push(picked.name);
+    mutablePool = mutablePool.filter((entry) => entry.name !== picked.name);
+  }
+
+  return shuffleArray(selected);
 }
 
-async function generateWeeklyMealPlan(profile, groceryItems, userId) {
+async function generateWeeklyMealPlan(profile, groceryItems, userId, previousPlanMeals = []) {
   const allMeals = loadMealsFromDataset();
   const blockedMeals = await getBlockedMealsByFeedback(userId);
+  const previousMealsSet = new Set((previousPlanMeals || []).map((name) => normalizeText(name)).filter(Boolean));
 
   const filteredMeals = filterMealsForUser(allMeals, profile, groceryItems, blockedMeals);
 
@@ -541,7 +633,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       breakfastByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('breakfast', m)),
       profile,
       usedMeals,
-      'breakfast'
+      'breakfast',
+      previousMealsSet
     );
     const lunchMain = chooseMealWithRegionPriority(
       mainsByRegion.primary.filter((m) => isDigestibilityAllowed('lunchMain', m)),
@@ -549,7 +642,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       mainsByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('lunchMain', m)),
       profile,
       usedMeals,
-      'lunchMain'
+      'lunchMain',
+      previousMealsSet
     );
     const lunchSide = chooseMealWithRegionPriority(
       sideByRegion.primary,
@@ -557,7 +651,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       sideByRegion.fallbackOther,
       profile,
       usedMeals,
-      'lunchSide'
+      'lunchSide',
+      previousMealsSet
     );
     const dinnerMain = chooseMealWithRegionPriority(
       mainsByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
@@ -565,7 +660,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       mainsByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
       profile,
       usedMeals,
-      'dinnerMain'
+      'dinnerMain',
+      previousMealsSet
     );
     const dinnerSide = chooseMealWithRegionPriority(
       sideByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
@@ -573,7 +669,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       sideByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
       profile,
       usedMeals,
-      'dinnerSide'
+      'dinnerSide',
+      previousMealsSet
     );
     const appetizer = chooseMealWithRegionPriority(
       appetizerByRegion.primary,
@@ -581,7 +678,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       appetizerByRegion.fallbackOther,
       profile,
       usedMeals,
-      'appetizer'
+      'appetizer',
+      previousMealsSet
     );
     const dessert = chooseMealWithRegionPriority(
       dessertByRegion.primary,
@@ -589,7 +687,8 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
       dessertByRegion.fallbackOther,
       profile,
       usedMeals,
-      'dessert'
+      'dessert',
+      previousMealsSet
     );
 
     if (!breakfast || !lunchMain || !lunchSide || !dinnerMain || !dinnerSide || !appetizer || !dessert) {
