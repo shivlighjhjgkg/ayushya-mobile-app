@@ -1,7 +1,7 @@
 // utils/database.ts
 // Database functions using MongoDB backend via API
 
-import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, type Family } from './api';
+import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, getCurrentWeeklyMealPlan as apiGetCurrentWeeklyMealPlan, type Family, type WeeklyMealPlan } from './api';
 
 export interface User {
   _id: string;
@@ -413,6 +413,26 @@ export async function getCurrentWeeklyGroceryList(
       success: false,
       items: [],
       message: error.message || 'Failed to load grocery list',
+    };
+  }
+}
+
+export async function getCurrentWeeklyMealPlan(
+  userId: string,
+  token: string,
+  refresh = false
+): Promise<{ success: boolean; plan?: WeeklyMealPlan; message?: string }> {
+  try {
+    const result = await apiGetCurrentWeeklyMealPlan(userId, token, refresh);
+    return {
+      success: result.success,
+      plan: result.plan,
+      message: result.message,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to load weekly meal plan',
     };
   }
 }

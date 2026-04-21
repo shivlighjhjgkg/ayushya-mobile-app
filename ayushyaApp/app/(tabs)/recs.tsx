@@ -1,10 +1,10 @@
 // app/(tabs)/recs.tsx
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { WEEKLY_MEALS } from '../../utils/constants';
 import { GROCERY_ITEMS } from '../../utils/groceryItems';
-import { getCurrentWeeklyGroceryList, saveWeeklyGroceryList } from '../../utils/database';
+import { getCurrentWeeklyGroceryList, getCurrentWeeklyMealPlan, saveWeeklyGroceryList } from '../../utils/database';
 import { useAuth } from '../../utils/authContext';
+import { MealChoice, WeeklyMealPlanDay } from '../../utils/api';
 
 export default function Recs() {
   const { user, token } = useAuth();
@@ -13,6 +13,9 @@ export default function Recs() {
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [savingList, setSavingList] = useState(false);
+  const [mealDays, setMealDays] = useState<WeeklyMealPlanDay[]>([]);
+  const [mealPlanLoading, setMealPlanLoading] = useState(false);
+  const [mealPlanError, setMealPlanError] = useState<string | null>(null);
 
   const filteredGroceries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -51,6 +54,75 @@ export default function Recs() {
 
     loadSavedGroceryList();
   }, [user, token]);
+
+  useEffect(() => {
+    const loadMealPlan = async () => {
+      if (tab !== 'meals' || !user || !token) {
+        return;
+      }
+
+      setMealPlanLoading(true);
+      setMealPlanError(null);
+
+      const response = await getCurrentWeeklyMealPlan(user._id, token);
+
+      if (!response.success || !response.plan) {
+        setMealPlanLoading(false);
+        setMealPlanError(response.message || 'Could not generate meal plan yet.');
+        return;
+      }
+
+      setMealDays(response.plan.days || []);
+      setMealPlanLoading(false);
+    };
+
+    loadMealPlan();
+  }, [tab, user, token]);
+
+  const regenerateMealPlan = async () => {
+    if (!user || !token) {
+      Alert.alert('Login required', 'Please login to generate meal plan.');
+      return;
+    }
+
+    setMealPlanLoading(true);
+    setMealPlanError(null);
+
+    const response = await getCurrentWeeklyMealPlan(user._id, token, true);
+
+    if (!response.success || !response.plan) {
+      setMealPlanLoading(false);
+      setMealPlanError(response.message || 'Could not regenerate meal plan.');
+      return;
+    }
+
+    setMealDays(response.plan.days || []);
+    setMealPlanLoading(false);
+  };
+
+  const renderDish = (label: string, meal: MealChoice) => {
+    const matched = meal.matchedIngredients || [];
+    const unmatched = meal.unmatchedIngredients || [];
+
+    return (
+      <View style={styles.mealSlot}>
+        <Text style={styles.mealSlotLabel}>{label}</Text>
+        <Text style={styles.mealSlotText}>{meal.name}</Text>
+        <View style={styles.ingredientRow}>
+          {matched.slice(0, 4).map((ingredient, idx) => (
+            <View key={`m-${idx}-${ingredient}`} style={styles.ingredientChipGood}>
+              <Text style={styles.ingredientChipGoodText}>{ingredient}</Text>
+            </View>
+          ))}
+          {unmatched.slice(0, 3).map((ingredient, idx) => (
+            <View key={`u-${idx}-${ingredient}`} style={styles.ingredientChipBad}>
+              <Text style={styles.ingredientChipBadText}>{ingredient}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const handleSaveGroceryList = async () => {
     if (!user || !token) {
@@ -133,7 +205,17 @@ export default function Recs() {
 
       {tab === 'meals' && (
         <View style={styles.mealList}>
-          {WEEKLY_MEALS.map((m, i: number) => (
+          <TouchableOpacity
+            style={[styles.saveCartBtn, mealPlanLoading && styles.saveCartBtnDisabled]}
+            onPress={regenerateMealPlan}
+            disabled={mealPlanLoading}
+          >
+            <Text style={styles.saveCartText}>{mealPlanLoading ? 'Generating...' : '🔄 Regenerate plan'}</Text>
+          </TouchableOpacity>
+
+          {!!mealPlanError && <Text style={styles.mealPlanError}>{mealPlanError}</Text>}
+
+          {mealDays.map((m, i: number) => (
             <View key={i} style={styles.mealDay}>
               <TouchableOpacity style={styles.mealDayHdr} onPress={() => setOpenDay(openDay === i ? null : i)}>
                 <Text style={styles.mealDayName}>{m.day}</Text>
@@ -141,25 +223,21 @@ export default function Recs() {
               </TouchableOpacity>
               {openDay === i && (
                 <View style={styles.mealDayBody}>
-                  <View style={styles.mealSlot}>
-                    <Text style={styles.mealSlotLabel}>Lunch</Text>
-                    <Text style={styles.mealSlotText}>{m.lunch}</Text>
-                  </View>
-                  <View style={styles.mealSlot}>
-                    <Text style={styles.mealSlotLabel}>Dinner</Text>
-                    <Text style={styles.mealSlotText}>{m.dinner}</Text>
-                  </View>
-                  <View style={styles.mealTags}>
-                    {m.tags.map((t: string, j: number) => (
-                      <View key={j} style={styles.mealTag}>
-                        <Text style={styles.mealTagText}>{t}</Text>
-                      </View>
-                    ))}
-                  </View>
+                  {renderDish('Breakfast', m.breakfast)}
+                  {renderDish('Lunch Main', m.lunchMain)}
+                  {renderDish('Lunch Side', m.lunchSide)}
+                  {renderDish('Dinner Main', m.dinnerMain)}
+                  {renderDish('Dinner Side', m.dinnerSide)}
+                  {renderDish('Appetizer', m.appetizer)}
+                  {renderDish('Dessert', m.dessert)}
                 </View>
               )}
             </View>
           ))}
+
+          {!mealPlanLoading && mealDays.length === 0 && !mealPlanError && (
+            <Text style={styles.mealPlanHint}>No meal plan generated yet. Save grocery items and open this tab again.</Text>
+          )}
         </View>
       )}
     </ScrollView>
@@ -199,6 +277,13 @@ const styles = StyleSheet.create({
   mealSlot: { gap: 2 },
   mealSlotLabel: { fontSize: 11, fontWeight: '700', color: '#4a9b5f', textTransform: 'uppercase', letterSpacing: 0.5 },
   mealSlotText: { fontSize: 14, color: '#333' },
+  ingredientRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  ingredientChipGood: { backgroundColor: '#e8f5ee', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  ingredientChipGoodText: { color: '#2d6a4f', fontSize: 10, fontWeight: '600' },
+  ingredientChipBad: { backgroundColor: '#fdecea', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  ingredientChipBadText: { color: '#b64c2f', fontSize: 10, fontWeight: '600' },
+  mealPlanError: { color: '#b64c2f', fontSize: 13, marginBottom: 8 },
+  mealPlanHint: { color: '#666', fontSize: 13 },
   mealTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
   mealTag: { backgroundColor: '#f0f7f2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   mealTagText: { fontSize: 11, color: '#2d6a4f', fontWeight: '600' },

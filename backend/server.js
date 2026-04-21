@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const healthProfileRoutes = require('./routes/healthProfiles');
 const familyRoutes = require('./routes/family');
 const groceryListRoutes = require('./routes/groceryLists');
+const mealPlanRoutes = require('./routes/mealPlans');
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/health/profile', healthProfileRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/grocery-lists', groceryListRoutes);
+app.use('/api/meal-plans', mealPlanRoutes);
 
 // ==================== ERROR HANDLING ====================
 // 404 handler

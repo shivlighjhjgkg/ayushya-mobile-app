@@ -397,6 +397,42 @@ export interface GroceryList {
   updatedAt: string;
 }
 
+export interface MealChoice {
+  name: string;
+  course: string;
+  digestibility?: string;
+  dietary?: string;
+  region?: string;
+  season?: string;
+  doshaImpact?: {
+    vata: number;
+    pitta: number;
+    kapha: number;
+  };
+  url?: string;
+  matchedIngredients: string[];
+  unmatchedIngredients: string[];
+}
+
+export interface WeeklyMealPlanDay {
+  day: string;
+  breakfast: MealChoice;
+  lunchMain: MealChoice;
+  lunchSide: MealChoice;
+  dinnerMain: MealChoice;
+  dinnerSide: MealChoice;
+  appetizer: MealChoice;
+  dessert: MealChoice;
+}
+
+export interface WeeklyMealPlan {
+  _id: string;
+  userId: string;
+  weekStart: string;
+  weekEnd: string;
+  days: WeeklyMealPlanDay[];
+}
+
 /**
  * Create a new family
  */
@@ -520,6 +556,31 @@ export async function getCurrentWeeklyGroceryList(
     return {
       success: false,
       message: error.message || 'Failed to fetch grocery list',
+    };
+  }
+}
+
+/**
+ * Get current week's generated meal plan for a user
+ */
+export async function getCurrentWeeklyMealPlan(
+  userId: string,
+  token: string,
+  refresh = false
+): Promise<{ success: boolean; plan?: WeeklyMealPlan; source?: string; message?: string }> {
+  try {
+    const response = await apiCall<{ success: boolean; plan?: WeeklyMealPlan; source?: string; message?: string }>(
+      `/api/meal-plans/${userId}/current-week${refresh ? '?refresh=true' : ''}`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch weekly meal plan',
     };
   }
 }

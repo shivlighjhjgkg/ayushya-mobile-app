@@ -137,6 +137,7 @@ router.patch('/:userId', async (req, res) => {
    bmi,
    dietaryPreference,
    dateOfBirth,
+    desha,
    region,
    season
 
@@ -179,8 +180,10 @@ router.patch('/:userId', async (req, res) => {
   if (dateOfBirth !== undefined)
    profile.dateOfBirth = dateOfBirth;
 
-  if (region !== undefined)
-   profile.region = region;
+  if (desha !== undefined)
+   profile.desha = desha;
+  else if (region !== undefined)
+   profile.desha = region;
 
   if (season !== undefined)
    profile.season = season;
