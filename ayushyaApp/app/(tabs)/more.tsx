@@ -4,8 +4,9 @@ import { useRouter } from 'expo-router';
 
 import { FAMILY } from '../../utils/constants';
 import { useAuth } from '../../utils/authContext';
-import { getAllUsers } from '../../utils/database';
+import { getAllUsers, getFamily } from '../../utils/database';
 import { getHealthProfile } from '../../utils/api';
+import { Family } from '../../utils/api';
 
 interface Dosha {
  vata:number;
@@ -42,14 +43,18 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
  const router = useRouter();
 
  const [profile,setProfile] = useState<HealthProfile|null>(null);
+ const [family, setFamily] = useState<Family | null>(null);
 
 
 
  useEffect(()=>{
 
   loadProfile();
+  if (user && token) {
+    loadFamily();
+  }
 
- },[]);
+ },[user, token]);
 
 
 
@@ -62,6 +67,20 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
   if(res.profile){
 
    setProfile(res.profile);
+
+  }
+
+ };
+
+ const loadFamily = async ()=>{
+
+  if(!user || !token) return;
+
+  const res = await getFamily(user._id, token);
+
+  if(res.success && res.family){
+
+   setFamily(res.family);
 
   }
 
@@ -142,91 +161,51 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
 
   <Text style={styles.cardTitle}>
 
-   Family
+   👪 Family
 
   </Text>
 
-
-
-  {FAMILY.map((m,i)=>(
-
-   <View
-
-    key={i}
-
-    style={styles.familyItem}
-
-   >
-
-    <Text style={styles.famAvatar}>
-
-     {m.emoji}
-
-    </Text>
-
-
-    <View style={styles.famInfo}>
-
-     <Text style={styles.famName}>
-
-      {m.name}
-
-     </Text>
-
-     <Text style={styles.famDosha}>
-
-      {m.dosha}
-
-     </Text>
-
-    </View>
-
-
-    <View
-
-     style={[
-
-      styles.famStatus,
-
-      m.ok
-
-      ? styles.famOk
-
-      : styles.famWarn
-
-     ]}
-
+  {family && family.members && family.members.length > 0 ? (
+    <>
+      <Text style={styles.familyName}>{family.familyName}</Text>
+      {family.members.map((m, i) => (
+        <View key={i} style={styles.familyItem}>
+          <View style={styles.famInfo}>
+            <Text style={styles.famName}>
+              {m.name}
+            </Text>
+            <Text style={styles.famDosha}>
+              {m.doshaScores ? `Vata ${m.doshaScores.vata} · Pitta ${m.doshaScores.pitta} · Kapha ${m.doshaScores.kapha}` : 'Quiz pending'}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.famStatus,
+              m.doshaScores ? styles.famOk : styles.famWarn,
+            ]}
+          >
+            <Text
+              style={[
+                styles.famStatusText,
+                m.doshaScores ? styles.famOkText : styles.famWarnText,
+              ]}
+            >
+              {m.doshaScores ? 'Complete' : 'Pending'}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </>
+  ) : (
+    <TouchableOpacity
+      style={styles.familyEmptyLink}
+      onPress={() => router.push('/(tabs)/family')}
     >
-
-     <Text
-
-      style={[
-
-       styles.famStatusText,
-
-       m.ok
-
-       ? styles.famOkText
-
-       : styles.famWarnText
-
-      ]}
-
-     >
-
-      {m.ok
-
-      ? 'On track'
-
-      : 'Needs review'}
-
-     </Text>
-
-    </View>
-
-   </View>
-
-  ))}
+      <Text style={styles.familyEmptyText}>
+        No family yet · Go to Family tab to create or join →
+      </Text>
+    </TouchableOpacity>
+  )}
 
  </View>
 
@@ -460,6 +439,36 @@ const styles = StyleSheet.create({
   fontWeight:"700",
 
   marginBottom:12
+
+ },
+
+ familyName:{
+
+  fontSize:13,
+
+  color:"#666",
+
+  fontWeight:"600",
+
+  marginBottom:10
+
+ },
+
+ familyEmptyLink:{
+
+  paddingVertical:12,
+
+  paddingHorizontal:8
+
+ },
+
+ familyEmptyText:{
+
+  fontSize:13,
+
+  color:"#4a9b5f",
+
+  fontWeight:"500"
 
  },
 

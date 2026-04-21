@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import AppLayout from '../components/layout/AppLayout';
 import AQI from './(tabs)/aqi';
 import Dashboard from './(tabs)/dashboard';
+import Family from './(tabs)/family';
 import More from './(tabs)/more';
 import Pairing from './(tabs)/pairing';
 import Recs from './(tabs)/recs';
@@ -16,7 +17,7 @@ import { useAuth } from '../utils/authContext';
 import { initDatabase } from '../utils/database';
 
 type Screen = 'hero' | 'quiz' | 'result' | 'app' | 'login' | 'register';
-type Tab = 'dash' | 'recs' | 'satmya' | 'pairing' | 'aqi' | 'more';
+type Tab = 'dash' | 'recs' | 'satmya' | 'pairing' | 'aqi' | 'family' | 'more';
 
 interface Dosha {
   vata: number;
@@ -87,6 +88,7 @@ export default function Index() {
       case 'satmya':  return <Satmya />;
       case 'pairing': return <Pairing />;
       case 'aqi':     return <AQI />;
+      case 'family':  return <Family />;
       case 'more':    return <More dosha={dosha} onLogout={() => setScreen('login')} />;
       default:        return null;
     }

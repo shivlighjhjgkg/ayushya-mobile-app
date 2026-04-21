@@ -66,5 +66,6 @@ export const NAV = [
   { key:'satmya', icon:'📝', label:'Daily Log' },
   { key:'pairing', icon:'🥗', label:'Food Pairs' },
   { key:'aqi', icon:'🌬️', label:'AQI Routes' },
+  { key:'family', icon:'👪', label:'Family' },
   { key:'more', icon:'⋯', label:'More' },
 ];

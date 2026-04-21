@@ -361,3 +361,104 @@ export async function updateHealthProfile(
     };
   }
 }
+
+// ==================== FAMILY ENDPOINTS ====================
+
+export interface FamilyMember {
+  userId: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'member';
+  joinedAt: string;
+  doshaScores?: {
+    vata: number;
+    pitta: number;
+    kapha: number;
+  };
+  dominantDosha?: string;
+}
+
+export interface Family {
+  _id: string;
+  familyName: string;
+  familyCode: string;
+  createdBy: string;
+  members: FamilyMember[];
+  createdAt: string;
+}
+
+/**
+ * Create a new family
+ */
+export async function createFamily(
+  userId: string,
+  familyName: string,
+  token: string
+): Promise<{ success: boolean; message: string; family?: Family }> {
+  try {
+    console.log('\n👨‍👩‍👧‍👦 POST /api/family/create');
+    const response = await apiCall<{ success: boolean; message: string; family?: Family }>(
+      '/api/family/create',
+      'POST',
+      { userId, familyName },
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to create family',
+    };
+  }
+}
+
+/**
+ * Join a family using code
+ */
+export async function joinFamily(
+  userId: string,
+  familyCode: string,
+  token: string
+): Promise<{ success: boolean; message: string; family?: Family }> {
+  try {
+    console.log('\n👨‍👩‍👧 POST /api/family/join');
+    const response = await apiCall<{ success: boolean; message: string; family?: Family }>(
+      '/api/family/join',
+      'POST',
+      { userId, familyCode },
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to join family',
+    };
+  }
+}
+
+/**
+ * Get family members for a user
+ */
+export async function getFamily(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; family?: Family | null }> {
+  try {
+    console.log('\n👪 GET /api/family/:userId');
+    const response = await apiCall<{ success: boolean; family?: Family | null }>(
+      `/api/family/${userId}`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+    };
+  }
+}

@@ -22,6 +22,12 @@ const UserSchema = new mongoose.Schema(
   select:false
  },
 
+ familyId:{
+  type:mongoose.Schema.Types.ObjectId,
+  ref:'Family',
+  default:null
+ },
+
  created_at:{
   type:Date,
   default:Date.now

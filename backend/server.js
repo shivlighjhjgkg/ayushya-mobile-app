@@ -6,6 +6,7 @@ const cors = require('cors');
 // Import routes
 const authRoutes = require('./routes/auth');
 const healthProfileRoutes = require('./routes/healthProfiles');
+const familyRoutes = require('./routes/family');
 
 const app = express();
 
@@ -17,6 +18,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Explicitly handle OPTIONS preflight for all routes (ensure PATCH allowed)
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -60,6 +64,7 @@ app.use((req, res, next) => {
 // ==================== API ROUTES ====================
 app.use('/api/auth', authRoutes);
 app.use('/api/health/profile', healthProfileRoutes);
+app.use('/api/family', familyRoutes);
 
 // ==================== ERROR HANDLING ====================
 // 404 handler

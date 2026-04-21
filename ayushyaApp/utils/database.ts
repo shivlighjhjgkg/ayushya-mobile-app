@@ -1,7 +1,7 @@
 // utils/database.ts
 // Database functions using MongoDB backend via API
 
-import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile } from './api';
+import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, type Family } from './api';
 
 export interface User {
   _id: string;
@@ -279,6 +279,99 @@ export async function updateHealthProfile(
     return {
       success: false,
       message: error.message || 'Failed to update profile',
+    };
+  }
+}
+
+// ==================== FAMILY OPERATIONS ====================
+
+/**
+ * Create a new family
+ */
+export async function createFamily(
+  userId: string,
+  familyName: string,
+  token: string
+): Promise<{ success: boolean; message: string; family?: Family }> {
+  try {
+    console.log('\n👨‍👩‍👧‍👦 Creating family:', familyName);
+    const result = await apiCreateFamily(userId, familyName, token);
+    
+    if (result.success) {
+      console.log('✅ Family created:', familyName);
+    } else {
+      console.error('❌ Error creating family:', result.message);
+    }
+    
+    return {
+      success: result.success,
+      message: result.message,
+      family: result.family,
+    };
+  } catch (error: any) {
+    console.error('❌ Error creating family:', error);
+    return {
+      success: false,
+      message: error.message || 'Failed to create family',
+    };
+  }
+}
+
+/**
+ * Join a family using code
+ */
+export async function joinFamily(
+  userId: string,
+  familyCode: string,
+  token: string
+): Promise<{ success: boolean; message: string; family?: Family }> {
+  try {
+    console.log('\n👨‍👩‍👧 Joining family with code:', familyCode);
+    const result = await apiJoinFamily(userId, familyCode, token);
+    
+    if (result.success) {
+      console.log('✅ Joined family successfully');
+    } else {
+      console.error('❌ Error joining family:', result.message);
+    }
+    
+    return {
+      success: result.success,
+      message: result.message,
+      family: result.family,
+    };
+  } catch (error: any) {
+    console.error('❌ Error joining family:', error);
+    return {
+      success: false,
+      message: error.message || 'Failed to join family',
+    };
+  }
+}
+
+/**
+ * Get family members for a user
+ */
+export async function getFamily(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; family?: Family | null }> {
+  try {
+    console.log('\n👪 Fetching family for user:', userId);
+    const result = await apiGetFamily(userId, token);
+    
+    if (result.success) {
+      console.log('✅ Family fetched successfully');
+    }
+    
+    return {
+      success: result.success,
+      family: result.family,
+    };
+  } catch (error: any) {
+    console.error('❌ Error fetching family:', error);
+    return {
+      success: false,
     };
   }
 }
