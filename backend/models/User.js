@@ -2,63 +2,104 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const UserSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: [true, 'Please add a name'],
-      trim: true,
-      maxlength: 100,
-    },
-    email: {
-      type: String,
-      required: [true, 'Please add an email'],
-      unique: true,
-      lowercase: true,
-      match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please add a valid email'],
-    },
-    password_hash: {
-      type: String,
-      required: [true, 'Please add a password'],
-      minlength: 6,
-      select: false, // Don't return password in queries by default
-    },
-    created_at: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-  { timestamps: false }
-);
+{
+ name:{
+  type:String,
+  required:true,
+  trim:true
+ },
 
-// Hash password before saving
-UserSchema.pre('save', async function () {
-  // Only hash if password is modified
-  if (!this.isModified('password_hash')) {
-    return;
-  }
+ email:{
+  type:String,
+  required:true,
+  unique:true,
+  lowercase:true
+ },
 
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password_hash = await bcrypt.hash(this.password_hash, salt);
-  } catch (error) {
-    throw error;
-  }
+ password_hash:{
+  type:String,
+  required:true,
+  select:false
+ },
+
+ created_at:{
+  type:Date,
+  default:Date.now
+ }
+
 });
 
-// Method to compare passwords
-UserSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password_hash);
+
+
+// hash password
+UserSchema.pre('save', async function(){
+
+ if(!this.isModified('password_hash')) return;
+
+ const salt = await bcrypt.genSalt(10);
+
+ this.password_hash = await bcrypt.hash(
+  this.password_hash,
+  salt
+ );
+
+});
+
+
+
+// compare password
+UserSchema.methods.comparePassword = async function(password){
+
+ return bcrypt.compare(
+  password,
+  this.password_hash
+ );
+
 };
 
-// Cascade delete: Remove health profile when user is deleted
-UserSchema.pre('findOneAndDelete', async function (next) {
-  const filter = this.getFilter();
-  const userId = filter._id;
+
+
+// CASCADE DELETE HEALTH PROFILE
+UserSchema.pre('findOneAndDelete', async function(next){
+
+ try{
+
   const HealthProfile = require('./HealthProfile');
-  console.log(`🗑️ Cascade deleting health profile for user ${userId}`);
-  const result = await HealthProfile.deleteOne({ userId });
-  console.log(`✅ Deleted ${result.deletedCount} health profile(s)`);
+
+  const user = await this.model.findOne(
+   this.getFilter()
+  );
+
+  if(user){
+
+   await HealthProfile.deleteOne({
+
+    userId:user._id
+
+   });
+
+   console.log(
+    "Deleted health profile for user:",
+    user._id
+   );
+
+  }
+
   next();
+
+ }
+
+ catch(err){
+
+  next(err);
+
+ }
+
 });
 
-module.exports = mongoose.model('User', UserSchema);
+
+
+module.exports = mongoose.model(
+ 'User',
+ UserSchema
+);

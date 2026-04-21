@@ -128,84 +128,90 @@ router.post('/', async (req, res) => {
 // ==================== UPDATE PERSONALISATION ====================
 router.patch('/:userId', async (req, res) => {
 
-  try {
+ try {
 
-    const {
+  const {
 
-      allergens,
-      age,
-      bmi,
-      dietaryPreference,
-      dateOfBirth,
-      region,
-      season
+   allergens,
+   age,
+   bmi,
+   dietaryPreference,
+   dateOfBirth,
+   region,
+   season
 
-    } = req.body;
-
-
-    const profile = await HealthProfile.findOne({
-
-      userId: req.params.userId
-
-    });
+  } = req.body;
 
 
-    if (!profile) {
+  let profile = await HealthProfile.findOne({
 
-      return res.status(404).json({
-        success: false,
-        message: 'Health profile not found'
-      });
+   userId: req.params.userId
 
-    }
+  });
 
 
-    if (allergens !== undefined)
-      profile.allergens = allergens;
+  // create profile if not existing
+  if (!profile) {
 
-    if (age !== undefined)
-      profile.age = age;
+   profile = new HealthProfile({
 
-    if (bmi !== undefined)
-      profile.bmi = bmi;
+    userId: req.params.userId
 
-    if (dietaryPreference !== undefined)
-      profile.dietaryPreference = dietaryPreference;
-
-    if (dateOfBirth !== undefined)
-      profile.dateOfBirth = dateOfBirth;
-
-    if (region !== undefined)
-      profile.region = region;
-
-    if (season !== undefined)
-      profile.season = season;
-
-
-    await profile.save();
-
-
-    res.json({
-
-      success: true,
-      profile
-
-    });
+   });
 
   }
 
-  catch (err) {
 
-    res.status(500).json({
+  // update only provided fields
 
-      success: false,
-      message: err.message
+  if (allergens !== undefined)
+   profile.allergens = allergens;
 
-    });
+  if (age !== undefined)
+   profile.age = age;
 
-  }
+  if (bmi !== undefined)
+   profile.bmi = bmi;
+
+  if (dietaryPreference !== undefined)
+   profile.dietaryPreference = dietaryPreference;
+
+  if (dateOfBirth !== undefined)
+   profile.dateOfBirth = dateOfBirth;
+
+  if (region !== undefined)
+   profile.region = region;
+
+  if (season !== undefined)
+   profile.season = season;
+
+
+  await profile.save();
+
+
+  res.json({
+
+   success: true,
+   message: "Profile updated successfully",
+   profile
+
+  });
+
+ }
+
+ catch (err) {
+
+  console.error("PATCH profile error:", err);
+
+  res.status(500).json({
+
+   success: false,
+   message: err.message
+
+  });
+
+ }
 
 });
-
 
 module.exports = router;
