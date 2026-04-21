@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { GROCERY_ITEMS } from '../../utils/groceryItems';
-import { getCurrentWeeklyGroceryList, getCurrentWeeklyMealPlan, saveWeeklyGroceryList } from '../../utils/database';
+import { getCurrentWeeklyGroceryList, getCurrentWeeklyMealPlan, getRecommendedWeeklyGroceryList, saveWeeklyGroceryList } from '../../utils/database';
 import { useAuth } from '../../utils/authContext';
 import { MealChoice, WeeklyMealPlanDay } from '../../utils/api';
 
@@ -16,6 +16,9 @@ export default function Recs() {
   const [mealDays, setMealDays] = useState<WeeklyMealPlanDay[]>([]);
   const [mealPlanLoading, setMealPlanLoading] = useState(false);
   const [mealPlanError, setMealPlanError] = useState<string | null>(null);
+  const [recommendedItems, setRecommendedItems] = useState<string[]>([]);
+  const [generatingRecommendations, setGeneratingRecommendations] = useState(false);
+  const [addingRecommended, setAddingRecommended] = useState(false);
 
   const filteredGroceries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -27,6 +30,14 @@ export default function Recs() {
       return acc;
     }, [] as { item: string; index: number }[]);
   }, [searchQuery]);
+
+  const groceryIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    GROCERY_ITEMS.forEach((item, index) => {
+      map.set(item.toLowerCase(), index);
+    });
+    return map;
+  }, []);
 
   useEffect(() => {
     const loadSavedGroceryList = async () => {
@@ -149,6 +160,59 @@ export default function Recs() {
     Alert.alert('Saved', 'Your grocery list for this week is saved.');
   };
 
+  const handleGenerateRecommendedList = async () => {
+    if (!user || !token) {
+      Alert.alert('Login required', 'Please login to generate your recommended grocery list.');
+      return;
+    }
+
+    setGeneratingRecommendations(true);
+    const response = await getRecommendedWeeklyGroceryList(user._id, token);
+    setGeneratingRecommendations(false);
+
+    if (!response.success) {
+      Alert.alert('Generation failed', response.message || 'Could not generate recommended grocery list.');
+      return;
+    }
+
+    setRecommendedItems(response.items || []);
+  };
+
+  const handleAddRecommendedToCart = async () => {
+    if (!user || !token) {
+      Alert.alert('Login required', 'Please login to add recommended items.');
+      return;
+    }
+
+    if (recommendedItems.length === 0) {
+      Alert.alert('No recommendations', 'Generate a recommended grocery list first.');
+      return;
+    }
+
+    const nextChecked: Record<number, boolean> = { ...checked };
+
+    for (const item of recommendedItems) {
+      const index = groceryIndexMap.get(item.toLowerCase());
+      if (index !== undefined) {
+        nextChecked[index] = true;
+      }
+    }
+
+    const selectedItems = GROCERY_ITEMS.filter((_, index) => nextChecked[index]);
+
+    setAddingRecommended(true);
+    const response = await saveWeeklyGroceryList(user._id, selectedItems, token);
+    setAddingRecommended(false);
+
+    if (!response.success) {
+      Alert.alert('Save failed', response.message || 'Could not add recommended items to cart.');
+      return;
+    }
+
+    setChecked(nextChecked);
+    Alert.alert('Added', 'Recommended items were added to cart and saved for this week.');
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <View style={styles.pageHeader}>
@@ -185,6 +249,33 @@ export default function Recs() {
           >
             <Text style={styles.saveCartText}>{savingList ? 'Saving...' : '🛒 Save this week'}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.secondaryBtn, generatingRecommendations && styles.saveCartBtnDisabled]}
+            onPress={handleGenerateRecommendedList}
+            disabled={generatingRecommendations}
+          >
+            <Text style={styles.secondaryBtnText}>{generatingRecommendations ? 'Generating...' : '✨ Generate Grocery List'}</Text>
+          </TouchableOpacity>
+
+          {recommendedItems.length > 0 && (
+            <View style={styles.recommendedCard}>
+              <Text style={styles.recommendedTitle}>Recommended Grocery List</Text>
+              <View style={styles.recommendedListWrap}>
+                {recommendedItems.map((item, idx) => (
+                  <Text key={`${item}-${idx}`} style={styles.recommendedItemText}>• {item}</Text>
+                ))}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.saveCartBtn, addingRecommended && styles.saveCartBtnDisabled]}
+                onPress={handleAddRecommendedToCart}
+                disabled={addingRecommended}
+              >
+                <Text style={styles.saveCartText}>{addingRecommended ? 'Adding...' : '🛒 Add Recommended to Cart'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={styles.groceryGrid}>
             {filteredGroceries.map(({ item, index }) => (
@@ -260,6 +351,12 @@ const styles = StyleSheet.create({
   saveCartBtn: { alignSelf: 'flex-start', backgroundColor: '#4a9b5f', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   saveCartBtnDisabled: { opacity: 0.6 },
   saveCartText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  secondaryBtn: { alignSelf: 'flex-start', backgroundColor: '#fff', borderColor: '#4a9b5f', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
+  secondaryBtnText: { color: '#2d6a4f', fontWeight: '700', fontSize: 12 },
+  recommendedCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e8f5ee' },
+  recommendedTitle: { fontSize: 13, fontWeight: '700', color: '#2d6a4f', marginBottom: 8 },
+  recommendedListWrap: { gap: 4, marginBottom: 10 },
+  recommendedItemText: { fontSize: 12, color: '#333' },
   groceryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   groceryItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, gap: 8, borderWidth: 1.5, borderColor: '#e0e0e0', minWidth: '45%' },
   groceryItemChecked: { backgroundColor: '#f0f7f2', borderColor: '#4a9b5f' },

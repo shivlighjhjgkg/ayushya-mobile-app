@@ -1,5 +1,7 @@
 const express = require('express');
 const GroceryList = require('../models/GroceryList');
+const HealthProfile = require('../models/HealthProfile');
+const { generateRecommendedGroceryItems } = require('../services/mealPlanGenerator');
 
 const router = express.Router();
 
@@ -68,6 +70,48 @@ router.get('/:userId/current', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch grocery list',
+    });
+  }
+});
+
+router.get('/:userId/recommended', async (req, res) => {
+  try {
+    const tokenUserId = extractTokenUserId(req);
+
+    if (!tokenUserId) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided',
+      });
+    }
+
+    if (tokenUserId !== req.params.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized - token does not match userId',
+      });
+    }
+
+    const profile = await HealthProfile.findOne({ userId: req.params.userId });
+
+    if (!profile) {
+      return res.status(400).json({
+        success: false,
+        message: 'Health profile not found. Complete profile first.',
+      });
+    }
+
+    const items = await generateRecommendedGroceryItems(profile, req.params.userId, 35);
+
+    return res.json({
+      success: true,
+      items,
+    });
+  } catch (error) {
+    console.error('Generate recommended grocery list error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate recommended grocery list',
     });
   }
 });

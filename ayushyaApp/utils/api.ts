@@ -561,6 +561,30 @@ export async function getCurrentWeeklyGroceryList(
 }
 
 /**
+ * Generate profile-based recommended grocery list
+ */
+export async function getRecommendedWeeklyGroceryList(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; items?: string[]; message?: string }> {
+  try {
+    const response = await apiCall<{ success: boolean; items?: string[]; message?: string }>(
+      `/api/grocery-lists/${userId}/recommended`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to generate recommended grocery list',
+    };
+  }
+}
+
+/**
  * Get current week's generated meal plan for a user
  */
 export async function getCurrentWeeklyMealPlan(

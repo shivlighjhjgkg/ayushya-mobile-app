@@ -4,8 +4,10 @@ const mongoose = require('mongoose');
 const { parse } = require('csv-parse/sync');
 
 const CSV_PATH = path.join(__dirname, '..', '..', 'ayushyaApp', 'datasets', 'meal_prediction_dataset_cleaned.csv');
+const GROCERY_SOURCE_PATH = path.join(__dirname, '..', '..', 'ayushyaApp', 'datasets', 'grocerylist.txt');
 
 let cachedMeals = null;
+let cachedGroceryUniverse = null;
 
 function normalizeText(value) {
   return String(value || '')
@@ -37,6 +39,34 @@ function parseDoshaImpact(value) {
 
 function toBoolean(value) {
   return String(value || '').trim().toLowerCase() === 'true';
+}
+
+function loadGroceryUniverse() {
+  if (cachedGroceryUniverse) {
+    return cachedGroceryUniverse;
+  }
+
+  const lines = fs
+    .readFileSync(GROCERY_SOURCE_PATH, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+
+  const uniqueMap = new Map();
+  for (const line of lines) {
+    const normalized = normalizeText(line);
+    if (!normalized || uniqueMap.has(normalized)) {
+      continue;
+    }
+    uniqueMap.set(normalized, line);
+  }
+
+  cachedGroceryUniverse = Array.from(uniqueMap.entries()).map(([normalized, raw]) => ({
+    raw,
+    normalized,
+  }));
+
+  return cachedGroceryUniverse;
 }
 
 function loadMealsFromDataset() {
@@ -184,14 +214,20 @@ function isSeasonCompatible(meal, userSeason) {
   return meal.normalizedSeason === 'all' || meal.normalizedSeason === season;
 }
 
-function isRegionCompatible(meal, userDesha) {
+function partitionByRegion(meals, userDesha) {
   const desha = normalizeText(userDesha);
 
   if (!desha) {
-    return true;
+    return {
+      primary: meals,
+      fallbackMixed: [],
+    };
   }
 
-  return ['mixed', 'global', desha].includes(meal.normalizedRegion);
+  return {
+    primary: meals.filter((meal) => meal.normalizedRegion === desha),
+    fallbackMixed: meals.filter((meal) => meal.normalizedRegion === 'mixed'),
+  };
 }
 
 function hasAllergenConflict(meal, userAllergens) {
@@ -290,6 +326,16 @@ function chooseMeal(candidates, profile, usedMeals, slot) {
   return selected;
 }
 
+function chooseMealWithRegionPriority(primaryCandidates, mixedCandidates, profile, usedMeals, slot) {
+  const fromPrimary = chooseMeal(primaryCandidates, profile, usedMeals, slot);
+
+  if (fromPrimary) {
+    return fromPrimary;
+  }
+
+  return chooseMeal(mixedCandidates, profile, usedMeals, slot);
+}
+
 function toMealChoice(meal) {
   return {
     name: meal.name,
@@ -311,7 +357,6 @@ function filterMealsForUser(meals, profile, groceryItems, blockedMeals) {
     .filter((meal) => isAgeSuitable(meal, profile.age))
     .filter((meal) => isDietaryCompatible(meal, profile.dietaryPreference))
     .filter((meal) => isSeasonCompatible(meal, profile.season))
-    .filter((meal) => isRegionCompatible(meal, profile.desha || profile.region))
     .filter((meal) => !hasAllergenConflict(meal, profile.allergens || []))
     .map((meal) => {
       const matchInfo = ingredientMatchInfo(meal, groceryItems);
@@ -329,6 +374,83 @@ function byCourse(meals, courseSet) {
   return meals.filter((meal) => courseSet.has(meal.course));
 }
 
+function filterMealsForProfile(meals, profile, blockedMeals) {
+  return meals
+    .filter((meal) => !blockedMeals.has(meal.normalizedName))
+    .filter((meal) => isAgeSuitable(meal, profile.age))
+    .filter((meal) => isDietaryCompatible(meal, profile.dietaryPreference))
+    .filter((meal) => isSeasonCompatible(meal, profile.season))
+    .filter((meal) => !hasAllergenConflict(meal, profile.allergens || []));
+}
+
+function matchIngredientToGroceryItem(rawIngredient) {
+  const ingredient = normalizeText(rawIngredient);
+  if (!ingredient) {
+    return null;
+  }
+
+  const universe = loadGroceryUniverse();
+
+  const exact = universe.find((item) => item.normalized === ingredient);
+  if (exact) {
+    return exact.raw;
+  }
+
+  const candidates = universe.filter((item) => {
+    if (!item.normalized) {
+      return false;
+    }
+
+    return ingredient.includes(item.normalized) || item.normalized.includes(ingredient);
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  candidates.sort((a, b) => b.normalized.length - a.normalized.length);
+  return candidates[0].raw;
+}
+
+async function generateRecommendedGroceryItems(profile, userId, limit = 40) {
+  const allMeals = loadMealsFromDataset();
+  const blockedMeals = await getBlockedMealsByFeedback(userId);
+  const filteredMeals = filterMealsForProfile(allMeals, profile, blockedMeals);
+
+  const userDesha = profile.desha || profile.region;
+  const byRegion = partitionByRegion(filteredMeals, userDesha);
+
+  const scoreMap = new Map();
+
+  const ingestMeals = (meals, regionWeight) => {
+    for (const meal of meals) {
+      for (const ingredient of meal.ingredients || []) {
+        const matched = matchIngredientToGroceryItem(ingredient);
+        if (!matched) {
+          continue;
+        }
+
+        const key = normalizeText(matched);
+        if (!key) {
+          continue;
+        }
+
+        const prev = scoreMap.get(key) || { name: matched, score: 0 };
+        prev.score += regionWeight;
+        scoreMap.set(key, prev);
+      }
+    }
+  };
+
+  ingestMeals(byRegion.primary, 2);
+  ingestMeals(byRegion.fallbackMixed, 1);
+
+  return Array.from(scoreMap.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.name);
+}
+
 async function generateWeeklyMealPlan(profile, groceryItems, userId) {
   const allMeals = loadMealsFromDataset();
   const blockedMeals = await getBlockedMealsByFeedback(userId);
@@ -341,12 +463,25 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
   const appetizerPool = byCourse(filteredMeals, new Set(['appetizer']));
   const dessertPool = byCourse(filteredMeals, new Set(['dessert']));
 
+  const userDesha = profile.desha || profile.region;
+  const breakfastByRegion = partitionByRegion(breakfastPool, userDesha);
+  const mainsByRegion = partitionByRegion(mainsPool, userDesha);
+  const sideByRegion = partitionByRegion(sidePool, userDesha);
+  const appetizerByRegion = partitionByRegion(appetizerPool, userDesha);
+  const dessertByRegion = partitionByRegion(dessertPool, userDesha);
+
+  const breakfastEffective = [...breakfastByRegion.primary, ...breakfastByRegion.fallbackMixed];
+  const mainsEffective = [...mainsByRegion.primary, ...mainsByRegion.fallbackMixed];
+  const sideEffective = [...sideByRegion.primary, ...sideByRegion.fallbackMixed];
+  const appetizerEffective = [...appetizerByRegion.primary, ...appetizerByRegion.fallbackMixed];
+  const dessertEffective = [...dessertByRegion.primary, ...dessertByRegion.fallbackMixed];
+
   if (
-    breakfastPool.length < 7 ||
-    mainsPool.length < 14 ||
-    sidePool.length < 14 ||
-    appetizerPool.length < 7 ||
-    dessertPool.length < 7
+    breakfastEffective.length < 7 ||
+    mainsEffective.length < 14 ||
+    sideEffective.length < 14 ||
+    appetizerEffective.length < 7 ||
+    dessertEffective.length < 7
   ) {
     return {
       success: false,
@@ -360,33 +495,55 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
   const days = [];
 
   for (const day of dayNames) {
-    const breakfast = chooseMeal(
-      breakfastPool.filter((m) => isDigestibilityAllowed('breakfast', m)),
+    const breakfast = chooseMealWithRegionPriority(
+      breakfastByRegion.primary.filter((m) => isDigestibilityAllowed('breakfast', m)),
+      breakfastByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('breakfast', m)),
       profile,
       usedMeals,
       'breakfast'
     );
-    const lunchMain = chooseMeal(
-      mainsPool.filter((m) => isDigestibilityAllowed('lunchMain', m)),
+    const lunchMain = chooseMealWithRegionPriority(
+      mainsByRegion.primary.filter((m) => isDigestibilityAllowed('lunchMain', m)),
+      mainsByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('lunchMain', m)),
       profile,
       usedMeals,
       'lunchMain'
     );
-    const lunchSide = chooseMeal(sidePool, profile, usedMeals, 'lunchSide');
-    const dinnerMain = chooseMeal(
-      mainsPool.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
+    const lunchSide = chooseMealWithRegionPriority(
+      sideByRegion.primary,
+      sideByRegion.fallbackMixed,
+      profile,
+      usedMeals,
+      'lunchSide'
+    );
+    const dinnerMain = chooseMealWithRegionPriority(
+      mainsByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
+      mainsByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
       profile,
       usedMeals,
       'dinnerMain'
     );
-    const dinnerSide = chooseMeal(
-      sidePool.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
+    const dinnerSide = chooseMealWithRegionPriority(
+      sideByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
+      sideByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
       profile,
       usedMeals,
       'dinnerSide'
     );
-    const appetizer = chooseMeal(appetizerPool, profile, usedMeals, 'appetizer');
-    const dessert = chooseMeal(dessertPool, profile, usedMeals, 'dessert');
+    const appetizer = chooseMealWithRegionPriority(
+      appetizerByRegion.primary,
+      appetizerByRegion.fallbackMixed,
+      profile,
+      usedMeals,
+      'appetizer'
+    );
+    const dessert = chooseMealWithRegionPriority(
+      dessertByRegion.primary,
+      dessertByRegion.fallbackMixed,
+      profile,
+      usedMeals,
+      'dessert'
+    );
 
     if (!breakfast || !lunchMain || !lunchSide || !dinnerMain || !dinnerSide || !appetizer || !dessert) {
       return {
@@ -417,4 +574,5 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
 
 module.exports = {
   generateWeeklyMealPlan,
+  generateRecommendedGroceryItems,
 };
