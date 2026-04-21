@@ -433,6 +433,15 @@ export interface WeeklyMealPlan {
   days: WeeklyMealPlanDay[];
 }
 
+export interface MealFeedbackLog {
+  _id: string;
+  userId: string;
+  mealType: 'breakfast' | 'lunch' | 'dinner';
+  mealName: string;
+  feedback: 'good' | 'neutral' | 'bad';
+  loggedAt: string;
+}
+
 /**
  * Create a new family
  */
@@ -605,6 +614,58 @@ export async function getCurrentWeeklyMealPlan(
     return {
       success: false,
       message: error.message || 'Failed to fetch weekly meal plan',
+    };
+  }
+}
+
+/**
+ * Save meal feedback log
+ */
+export async function saveMealFeedbackLog(
+  userId: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner',
+  mealName: string,
+  feedback: 'good' | 'neutral' | 'bad',
+  token: string
+): Promise<{ success: boolean; message: string; log?: MealFeedbackLog }> {
+  try {
+    const response = await apiCall<{ success: boolean; message: string; log?: MealFeedbackLog }>(
+      `/api/meal-feedback/${userId}`,
+      'POST',
+      { mealType, mealName, feedback },
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to save meal feedback',
+    };
+  }
+}
+
+/**
+ * Get recent meal feedback logs
+ */
+export async function getRecentMealFeedbackLogs(
+  userId: string,
+  token: string,
+  limit = 4
+): Promise<{ success: boolean; logs?: MealFeedbackLog[]; message?: string }> {
+  try {
+    const response = await apiCall<{ success: boolean; logs?: MealFeedbackLog[]; message?: string }>(
+      `/api/meal-feedback/${userId}/recent?limit=${limit}`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch recent logs',
     };
   }
 }

@@ -1,7 +1,7 @@
 // utils/database.ts
 // Database functions using MongoDB backend via API
 
-import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, getRecommendedWeeklyGroceryList as apiGetRecommendedWeeklyGroceryList, getCurrentWeeklyMealPlan as apiGetCurrentWeeklyMealPlan, type Family, type WeeklyMealPlan } from './api';
+import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, getRecommendedWeeklyGroceryList as apiGetRecommendedWeeklyGroceryList, getCurrentWeeklyMealPlan as apiGetCurrentWeeklyMealPlan, saveMealFeedbackLog as apiSaveMealFeedbackLog, getRecentMealFeedbackLogs as apiGetRecentMealFeedbackLogs, type Family, type WeeklyMealPlan, type MealFeedbackLog } from './api';
 
 export interface User {
   _id: string;
@@ -453,6 +453,47 @@ export async function getCurrentWeeklyMealPlan(
     return {
       success: false,
       message: error.message || 'Failed to load weekly meal plan',
+    };
+  }
+}
+
+// ==================== MEAL FEEDBACK OPERATIONS ====================
+
+export async function saveMealFeedbackLog(
+  userId: string,
+  mealType: 'breakfast' | 'lunch' | 'dinner',
+  mealName: string,
+  feedback: 'good' | 'neutral' | 'bad',
+  token: string
+): Promise<{ success: boolean; message: string; log?: MealFeedbackLog }> {
+  try {
+    const result = await apiSaveMealFeedbackLog(userId, mealType, mealName, feedback, token);
+    return result;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to save meal feedback',
+    };
+  }
+}
+
+export async function getRecentMealFeedbackLogs(
+  userId: string,
+  token: string,
+  limit = 4
+): Promise<{ success: boolean; logs: MealFeedbackLog[]; message?: string }> {
+  try {
+    const result = await apiGetRecentMealFeedbackLogs(userId, token, limit);
+    return {
+      success: result.success,
+      logs: result.logs || [],
+      message: result.message,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      logs: [],
+      message: error.message || 'Failed to fetch meal feedback logs',
     };
   }
 }

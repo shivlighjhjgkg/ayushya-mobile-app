@@ -1,30 +1,102 @@
 // app/(tabs)/satmya.tsx
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from '../../components/Toast';
-import { LOG_HISTORY } from '../../utils/constants';
+import { useAuth } from '../../utils/authContext';
+import { getCurrentWeeklyMealPlan, getRecentMealFeedbackLogs, saveMealFeedbackLog } from '../../utils/database';
+import { WeeklyMealPlanDay } from '../../utils/api';
 
 type FeedbackType = 'good' | 'neutral' | 'bad';
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
 interface LogEntry {
-  meal: string;
-  food: string;
+  meal: MealType;
+  mealName: string;
   fb: FeedbackType;
+  loggedAt?: string;
 }
 
 const fbIcon: Record<FeedbackType, string> = { good: '😊', neutral: '😐', bad: '😕' };
 
 export default function Satmya() {
+  const { user, token } = useAuth();
   const [meal, setMeal] = useState<MealType>('breakfast');
   const [food, setFood] = useState<string>('');
   const [fb, setFb] = useState<FeedbackType | null>(null);
   const [toast, setToast] = useState<boolean>(false);
-  const [history, setHistory] = useState<LogEntry[]>(LOG_HISTORY as LogEntry[]);
+  const [history, setHistory] = useState<LogEntry[]>([]);
+  const [mealDays, setMealDays] = useState<WeeklyMealPlanDay[]>([]);
 
-  const submit = () => {
-    if (!food || !fb) return;
-    setHistory((h) => [{ meal: meal.charAt(0).toUpperCase() + meal.slice(1), food, fb }, ...h]);
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user || !token) {
+        return;
+      }
+
+      const [planRes, logsRes] = await Promise.all([
+        getCurrentWeeklyMealPlan(user._id, token),
+        getRecentMealFeedbackLogs(user._id, token, 4),
+      ]);
+
+      if (planRes.success && planRes.plan) {
+        setMealDays(planRes.plan.days || []);
+      }
+
+      if (logsRes.success) {
+        setHistory(
+          (logsRes.logs || []).map((log) => ({
+            meal: log.mealType,
+            mealName: log.mealName,
+            fb: log.feedback,
+            loggedAt: log.loggedAt,
+          }))
+        );
+      }
+    };
+
+    loadData();
+  }, [user, token]);
+
+  const mealOptions = useMemo(() => {
+    if (mealDays.length === 0) {
+      return [] as string[];
+    }
+
+    const options = mealDays.flatMap((day) => {
+      if (meal === 'breakfast') {
+        return [day.breakfast?.name].filter(Boolean);
+      }
+
+      if (meal === 'lunch') {
+        return [day.lunchMain?.name, day.lunchSide?.name].filter(Boolean);
+      }
+
+      return [day.dinnerMain?.name, day.dinnerSide?.name].filter(Boolean);
+    });
+
+    return [...new Set(options)];
+  }, [meal, mealDays]);
+
+  useEffect(() => {
+    if (mealOptions.length === 0) {
+      return;
+    }
+
+    if (!food || !mealOptions.includes(food)) {
+      setFood(mealOptions[0]);
+    }
+  }, [mealOptions]);
+
+  const submit = async () => {
+    if (!food || !fb || !user || !token) return;
+
+    const result = await saveMealFeedbackLog(user._id, meal, food, fb, token);
+
+    if (!result.success) {
+      return;
+    }
+
+    setHistory((h) => [{ meal, mealName: food, fb, loggedAt: new Date().toISOString() }, ...h].slice(0, 4));
     setFood('');
     setFb(null);
     setToast(true);
@@ -55,11 +127,24 @@ export default function Satmya() {
           <Text style={styles.formLabel}>What did you eat?</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Ghee rice, banana, dal…"
+            placeholder={mealOptions.length > 0 ? 'Select from weekly menu below' : 'No weekly menu yet - type manually'}
             value={food}
             onChangeText={setFood}
             placeholderTextColor="#aaa"
           />
+          {mealOptions.length > 0 && (
+            <View style={styles.optionWrap}>
+              {mealOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.optionChip, food === option && styles.optionChipActive]}
+                  onPress={() => setFood(option)}
+                >
+                  <Text style={[styles.optionChipText, food === option && styles.optionChipTextActive]}>{option}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <Text style={styles.formLabel}>How did it feel?</Text>
           <View style={styles.fbRow}>
             {([['good', '😊', 'Felt good'], ['neutral', '😐', 'Neutral'], ['bad', '😕', "Didn't suit"]] as [FeedbackType, string, string][]).map(([k, ic, lb]) => (
@@ -88,8 +173,8 @@ export default function Satmya() {
           {history.map((h, i) => (
             <View key={i} style={styles.histItem}>
               <View style={styles.histLeft}>
-                <Text style={styles.histMeal}>{h.meal}</Text>
-                <Text style={styles.histFood}>{h.food}</Text>
+                <Text style={styles.histMeal}>{h.meal.toUpperCase()}</Text>
+                <Text style={styles.histFood}>{h.mealName}</Text>
               </View>
               <Text style={styles.histFb}>{fbIcon[h.fb]}</Text>
             </View>
@@ -115,6 +200,11 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   formLabel: { fontSize: 13, fontWeight: '600', color: '#555', marginBottom: 8 },
   input: { borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#333', marginBottom: 16, backgroundColor: '#fafafa' },
+  optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  optionChip: { borderWidth: 1, borderColor: '#d8e6dc', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#f7fbf8' },
+  optionChipActive: { borderColor: '#4a9b5f', backgroundColor: '#eaf6ee' },
+  optionChipText: { color: '#355', fontSize: 12 },
+  optionChipTextActive: { color: '#2d6a4f', fontWeight: '700' },
   fbRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   fbBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#e0e0e0', backgroundColor: '#fafafa' },
   fbGood: { borderColor: '#4a9b5f', backgroundColor: '#f0f7f2' },

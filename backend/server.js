@@ -9,6 +9,7 @@ const healthProfileRoutes = require('./routes/healthProfiles');
 const familyRoutes = require('./routes/family');
 const groceryListRoutes = require('./routes/groceryLists');
 const mealPlanRoutes = require('./routes/mealPlans');
+const mealFeedbackRoutes = require('./routes/mealFeedback');
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/health/profile', healthProfileRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/grocery-lists', groceryListRoutes);
 app.use('/api/meal-plans', mealPlanRoutes);
+app.use('/api/meal-feedback', mealFeedbackRoutes);
 
 // ==================== ERROR HANDLING ====================
 // 404 handler

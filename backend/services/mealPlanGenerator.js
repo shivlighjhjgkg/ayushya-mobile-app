@@ -148,17 +148,9 @@ async function getBlockedMealsByFeedback(userId) {
   const blocked = new Set();
 
   for (const [mealName, feelings] of mealMap.entries()) {
-    let consecutiveUnwell = 0;
+    const badCount = feelings.filter((feeling) => unwellWords.has(feeling)).length;
 
-    for (const feeling of feelings) {
-      if (unwellWords.has(feeling)) {
-        consecutiveUnwell += 1;
-      } else {
-        break;
-      }
-    }
-
-    if (consecutiveUnwell >= 3) {
+    if (badCount >= 3) {
       blocked.add(mealName);
     }
   }
@@ -221,12 +213,20 @@ function partitionByRegion(meals, userDesha) {
     return {
       primary: meals,
       fallbackMixed: [],
+      fallbackOther: [],
     };
   }
 
+  const primary = meals.filter((meal) => meal.normalizedRegion === desha);
+  const fallbackMixed = meals.filter((meal) => meal.normalizedRegion === 'mixed');
+  const fallbackOther = meals.filter(
+    (meal) => meal.normalizedRegion !== desha && meal.normalizedRegion !== 'mixed'
+  );
+
   return {
-    primary: meals.filter((meal) => meal.normalizedRegion === desha),
-    fallbackMixed: meals.filter((meal) => meal.normalizedRegion === 'mixed'),
+    primary,
+    fallbackMixed,
+    fallbackOther,
   };
 }
 
@@ -355,14 +355,20 @@ function chooseMeal(candidates, profile, usedMeals, slot) {
   return selected;
 }
 
-function chooseMealWithRegionPriority(primaryCandidates, mixedCandidates, profile, usedMeals, slot) {
+function chooseMealWithRegionPriority(primaryCandidates, mixedCandidates, otherCandidates, profile, usedMeals, slot) {
   const fromPrimary = chooseMeal(primaryCandidates, profile, usedMeals, slot);
 
   if (fromPrimary) {
     return fromPrimary;
   }
 
-  return chooseMeal(mixedCandidates, profile, usedMeals, slot);
+  const fromMixed = chooseMeal(mixedCandidates, profile, usedMeals, slot);
+
+  if (fromMixed) {
+    return fromMixed;
+  }
+
+  return chooseMeal(otherCandidates, profile, usedMeals, slot);
 }
 
 function toMealChoice(meal) {
@@ -504,10 +510,11 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
   const dessertByRegion = partitionByRegion(dessertPool, userDesha);
 
   const breakfastEffective = [...breakfastByRegion.primary, ...breakfastByRegion.fallbackMixed];
-  const mainsEffective = [...mainsByRegion.primary, ...mainsByRegion.fallbackMixed];
-  const sideEffective = [...sideByRegion.primary, ...sideByRegion.fallbackMixed];
-  const appetizerEffective = [...appetizerByRegion.primary, ...appetizerByRegion.fallbackMixed];
-  const dessertEffective = [...dessertByRegion.primary, ...dessertByRegion.fallbackMixed];
+  const mainsEffective = [...mainsByRegion.primary, ...mainsByRegion.fallbackMixed, ...mainsByRegion.fallbackOther];
+  const sideEffective = [...sideByRegion.primary, ...sideByRegion.fallbackMixed, ...sideByRegion.fallbackOther];
+  const appetizerEffective = [...appetizerByRegion.primary, ...appetizerByRegion.fallbackMixed, ...appetizerByRegion.fallbackOther];
+  const dessertEffective = [...dessertByRegion.primary, ...dessertByRegion.fallbackMixed, ...dessertByRegion.fallbackOther];
+  const breakfastAll = [...breakfastByRegion.primary, ...breakfastByRegion.fallbackMixed, ...breakfastByRegion.fallbackOther];
 
   if (
     breakfastEffective.length === 0 ||
@@ -531,6 +538,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const breakfast = chooseMealWithRegionPriority(
       breakfastByRegion.primary.filter((m) => isDigestibilityAllowed('breakfast', m)),
       breakfastByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('breakfast', m)),
+      breakfastByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('breakfast', m)),
       profile,
       usedMeals,
       'breakfast'
@@ -538,6 +546,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const lunchMain = chooseMealWithRegionPriority(
       mainsByRegion.primary.filter((m) => isDigestibilityAllowed('lunchMain', m)),
       mainsByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('lunchMain', m)),
+      mainsByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('lunchMain', m)),
       profile,
       usedMeals,
       'lunchMain'
@@ -545,6 +554,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const lunchSide = chooseMealWithRegionPriority(
       sideByRegion.primary,
       sideByRegion.fallbackMixed,
+      sideByRegion.fallbackOther,
       profile,
       usedMeals,
       'lunchSide'
@@ -552,6 +562,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const dinnerMain = chooseMealWithRegionPriority(
       mainsByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
       mainsByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
+      mainsByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('dinnerMain', m)),
       profile,
       usedMeals,
       'dinnerMain'
@@ -559,6 +570,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const dinnerSide = chooseMealWithRegionPriority(
       sideByRegion.primary.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
       sideByRegion.fallbackMixed.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
+      sideByRegion.fallbackOther.filter((m) => isDigestibilityAllowed('dinnerSide', m)),
       profile,
       usedMeals,
       'dinnerSide'
@@ -566,6 +578,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const appetizer = chooseMealWithRegionPriority(
       appetizerByRegion.primary,
       appetizerByRegion.fallbackMixed,
+      appetizerByRegion.fallbackOther,
       profile,
       usedMeals,
       'appetizer'
@@ -573,6 +586,7 @@ async function generateWeeklyMealPlan(profile, groceryItems, userId) {
     const dessert = chooseMealWithRegionPriority(
       dessertByRegion.primary,
       dessertByRegion.fallbackMixed,
+      dessertByRegion.fallbackOther,
       profile,
       usedMeals,
       'dessert'
