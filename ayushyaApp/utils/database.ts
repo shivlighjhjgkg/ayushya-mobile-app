@@ -152,11 +152,12 @@ export async function saveQuizResults(
   token: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    console.log('\n🔍 ==== SAVE QUIZ RESULTS ====');
+    console.log('\n🔍 ==== SAVE QUIZ RESULTS (DATABASE WRAPPER) ====');
     console.log('📊 User ID:', userId);
     console.log('📈 Dosha Scores:', dosha);
     console.log('🔑 Token:', token ? `Present (${token.substring(0, 30)}...)` : 'MISSING!');
     
+    // Call the imported API function
     const result = await apiSaveQuizResults(userId, dosha, token);
     
     console.log('📤 API Response:', result);
@@ -209,6 +210,39 @@ export async function getQuizResults(
 }
 
 /**
+ * Check if user needs to take quiz
+ * Returns true if profile doesn't exist or quiz not completed
+ */
+export async function needsQuiz(
+  userId: string,
+  token: string
+): Promise<boolean> {
+  try {
+    console.log('\n🔍 Checking if user needs quiz:', userId);
+    const result = await getHealthProfile(userId, token);
+    
+    // If fetch failed or profile doesn't exist, user needs quiz
+    if (!result.success || result.needsQuiz) {
+      console.log('✅ User NEEDS TO TAKE QUIZ');
+      return true;
+    }
+
+    // If profile exists and quiz is completed, skip quiz
+    if (result.profile && result.profile.quizCompleted) {
+      console.log('✅ User ALREADY COMPLETED QUIZ - skip to dashboard');
+      return false;
+    }
+
+    console.log('✅ User NEEDS TO TAKE QUIZ (not completed)');
+    return true;
+  } catch (error) {
+    console.error('Error checking quiz status:', error);
+    // If error, assume user needs to take quiz (safer assumption)
+    return true;
+  }
+}
+
+/**
  * Update health profile with additional health information
  */
 export async function updateHealthProfile(
@@ -228,17 +262,18 @@ export async function updateHealthProfile(
     console.log('📝 Updating health profile:', userId);
     console.log('📦 Data being sent to API:', JSON.stringify(data, null, 2));
     const result = await apiUpdateHealthProfile(userId, data, token || '');
-    
-    if (result.success) {
-      console.log('✅ Health profile updated');
-    } else {
-      console.error('❌ Error updating profile:', result.message);
+
+    // Return the full API result so callers can inspect profile and errors
+    if (result) {
+      console.log('📤 API updateHealthProfile response:', result);
+      return {
+        success: !!result.success,
+        message: result.message || (result.success ? 'Profile updated!' : 'Failed to update profile'),
+      } as { success: boolean; message: string };
     }
-    
-    return {
-      success: result.success,
-      message: result.message || 'Profile updated!',
-    };
+
+    console.error('❌ No response from updateHealthProfile API');
+    return { success: false, message: 'No response from server' };
   } catch (error: any) {
     console.error('❌ Error updating health profile:', error);
     return {

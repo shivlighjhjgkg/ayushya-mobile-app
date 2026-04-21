@@ -14,7 +14,7 @@ const app = express();
 app.use(cors({
   origin: true, // Allow all origins for now (development)
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -48,10 +48,18 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ==================== REQUEST LOGGING MIDDLEWARE ====================
+// Log incoming requests
+app.use((req, res, next) => {
+  if (req.path.includes('/health') || req.path.includes('/auth')) {
+    console.log(`\n📨 ${req.method.toUpperCase()} ${req.originalUrl}`);
+  }
+  next();
+});
+
 // ==================== API ROUTES ====================
 app.use('/api/auth', authRoutes);
-app.use('/api/health-profile', healthProfileRoutes);
-app.use('/api/health-profiles', healthProfileRoutes); // Legacy: for backward compatibility
+app.use('/api/health/profile', healthProfileRoutes);
 
 // ==================== ERROR HANDLING ====================
 // 404 handler

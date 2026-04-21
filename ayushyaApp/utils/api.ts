@@ -272,11 +272,7 @@ export async function saveQuizResults(
   token: string
 ): Promise<{ success: boolean; message: string; profile?: HealthProfile }> {
   try {
-    console.log('\n🔍 ==== API SAVE QUIZ RESULTS ====');
-    console.log('📊 Input:');
-    console.log('  - userId:', userId, '(type:', typeof userId, ')');
-    console.log('  - doshaScores:', doshaScores);
-    console.log('  - token exists:', !!token);
+    console.log('\n� POST /api/health/profile');
     
     // Calculate dominant dosha
     const dominantDosha = (
@@ -284,42 +280,22 @@ export async function saveQuizResults(
         current[1] > prev[1] ? current : prev
       ) as [string, number]
     )[0] as 'vata' | 'pitta' | 'kapha';
-    
-    console.log('  - dominantDosha (calculated):', dominantDosha);
 
-    // Send with snake_case payload to backend
     const payload = {
       userId,
-      dosha_scores: doshaScores,
-      dominant_dosha: dominantDosha,
-      quiz_completed: true,
-      created_at: new Date().toISOString(),
+      doshaScores,
+      dominantDosha,
+      quizCompleted: true,
     };
     
-    console.log('📦 Sending payload:', JSON.stringify(payload, null, 2));
-    console.log('🔑 Token first 20 chars:', token ? token.substring(0, 20) : 'MISSING!');
-    console.log('🌐 API Base URL:', API_BASE_URL);
-    console.log('📍 Full endpoint: /api/health-profile');
-
-    console.log('📡 Making API call to:', `${API_BASE_URL}/api/health-profile`);
+    console.log('📦 Payload:', JSON.stringify(payload, null, 2));
 
     const response = await apiCall<{ success: boolean; message: string; profile?: HealthProfile }>(
-      '/api/health-profile',
+      '/api/health/profile',
       'POST',
       payload,
       token
     );
-
-    console.log('📬 Backend response received:', response);
-    console.log('   - success:', response.success);
-    console.log('   - message:', response.message);
-    
-    if (!response) {
-      console.error('❌ Response is null/undefined!');
-      throw new Error('No response from backend');
-    }
-
-    console.log('🔍 ==== END API SAVE QUIZ ====\n');
     
     return response;
   } catch (error: any) {
@@ -340,10 +316,11 @@ export async function saveQuizResults(
 export async function getHealthProfile(
   userId: string,
   token: string
-): Promise<{ success: boolean; profile?: HealthProfile }> {
+): Promise<{ success: boolean; profile?: any; needsQuiz?: boolean }> {
   try {
-    const response = await apiCall<{ success: boolean; profile?: HealthProfile }>(
-      `/api/health-profiles/${userId}`,
+    console.log('\n📖 GET /api/health/profile/:userId');
+    const response = await apiCall<{ success: boolean; profile?: any; needsQuiz?: boolean }>(
+      `/api/health/profile/${userId}`,
       'GET',
       undefined,
       token
@@ -351,8 +328,10 @@ export async function getHealthProfile(
 
     return response;
   } catch (error: any) {
+    console.error('❌ Error fetching health profile:', error.message);
     return {
       success: false,
+      needsQuiz: true,
     };
   }
 }
@@ -366,9 +345,10 @@ export async function updateHealthProfile(
   token: string
 ): Promise<{ success: boolean; message: string; profile?: HealthProfile }> {
   try {
+    console.log('\n📝 PATCH /api/health/profile/:userId');
     const response = await apiCall<{ success: boolean; message: string; profile?: HealthProfile }>(
-      `/api/health-profiles/${userId}`,
-      'PUT',
+      `/api/health/profile/${userId}`,
+      'PATCH',
       data,
       token
     );

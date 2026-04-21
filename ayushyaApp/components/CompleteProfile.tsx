@@ -107,10 +107,11 @@ export default function CompleteProfile({ onDone, user: propUser, token: propTok
       desha: region || undefined,
       season: season || undefined,
     }, token);
+    console.log('📤 updateHealthProfile result:', result);
 
     setLoading(false);
 
-    if (result.success) {
+    if (result && result.success) {
       console.log('\u2705 Profile updated successfully');
       // Mark quiz as complete now that profile form is done
       if (dosha) {

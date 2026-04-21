@@ -227,7 +227,14 @@ router.delete('/user/:userId', async (req, res) => {
       });
     }
 
-    // Delete user (cascade delete will remove health profile)
+    // Import HealthProfile model
+    const HealthProfile = require('../models/HealthProfile');
+
+    // Delete user's health profile first (cascade delete)
+    await HealthProfile.deleteOne({ userId });
+    console.log(`🗑️ Deleted health profile for user ${userId}`);
+
+    // Delete user
     const user = await User.findByIdAndDelete(userId);
 
     if (!user) {

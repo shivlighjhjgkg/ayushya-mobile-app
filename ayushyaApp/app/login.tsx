@@ -1,7 +1,7 @@
 // app/login.tsx
 import { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Alert } from 'react-native';
-import { loginUser } from '../utils/database';
+import { loginUser, needsQuiz } from '../utils/database';
 import { useAuth } from '../utils/authContext';
 
 interface LoginProps {
@@ -23,18 +23,18 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
       return;
     }
 
-    console.log('📧 Email:', email);
-    console.log('🔒 Password length:', password.length);
-    console.log('🚀 Calling loginUser...');
-    
     setLoading(true);
     const result = await loginUser(email, password);
     
-    console.log('✅ Login result received:', result);
-    setLoading(false);
-
     if (result.success && result.user && result.token) {
-      console.log('🎉 Login successful, calling auth context...');
+      console.log('🎉 Login successful, checking quiz status...');
+      
+      // Check if user needs to take quiz
+      const quizNeeded = await needsQuiz(result.user._id, result.token);
+      
+      // Set quizCompleted based on whether quiz is needed
+      result.user.quizCompleted = !quizNeeded;
+      
       await login(result.user, result.token);
       Alert.alert('✅ Success', result.message);
       onLoginSuccess();
@@ -42,6 +42,8 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }: LoginProps
       console.log('❌ Login failed:', result.message);
       Alert.alert('❌ Login Failed', result.message);
     }
+    
+    setLoading(false);
   };
 
   return (
