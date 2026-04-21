@@ -83,7 +83,7 @@ export interface HealthProfile {
 // Helper function for API calls with error handling
 async function apiCall<T>(
   endpoint: string,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'GET',
   body?: any,
   token?: string
 ): Promise<T> {
@@ -223,7 +223,7 @@ export async function validateToken(token: string): Promise<{ success: boolean; 
     );
 
     return response;
-  } catch (error) {
+  } catch {
     return { success: false };
   }
 }
@@ -234,8 +234,8 @@ export async function validateToken(token: string): Promise<{ success: boolean; 
 export async function logoutUser(token: string): Promise<void> {
   try {
     await apiCall('/api/auth/logout', 'POST', {}, token);
-  } catch (error) {
-    console.error('Logout error:', error);
+  } catch {
+    console.error('Logout error');
   }
 }
 
@@ -254,7 +254,7 @@ export async function getUserProfile(userId: string, token: string): Promise<{ s
     );
 
     return response;
-  } catch (error: any) {
+  } catch {
     return {
       success: false,
     };
@@ -456,7 +456,7 @@ export async function getFamily(
     );
 
     return response;
-  } catch (error: any) {
+  } catch {
     return {
       success: false,
     };

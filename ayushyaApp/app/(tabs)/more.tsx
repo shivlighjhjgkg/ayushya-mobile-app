@@ -1,12 +1,10 @@
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 
-import { FAMILY } from '../../utils/constants';
 import { useAuth } from '../../utils/authContext';
 import { getAllUsers, getFamily } from '../../utils/database';
-import { getHealthProfile } from '../../utils/api';
-import { Family } from '../../utils/api';
+import { Family, getHealthProfile } from '../../utils/api';
 
 interface Dosha {
  vata:number;
@@ -47,18 +45,7 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
 
 
 
- useEffect(()=>{
-
-  loadProfile();
-  if (user && token) {
-    loadFamily();
-  }
-
- },[user, token]);
-
-
-
- const loadProfile = async ()=>{
+ const loadProfile = useCallback(async ()=>{
 
   if(!user || !token) return;
 
@@ -70,9 +57,9 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
 
   }
 
- };
+ },[user, token]);
 
- const loadFamily = async ()=>{
+ const loadFamily = useCallback(async ()=>{
 
   if(!user || !token) return;
 
@@ -84,7 +71,18 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
 
   }
 
- };
+ },[user, token]);
+
+
+
+ useEffect(()=>{
+
+  loadProfile();
+  if (user && token) {
+    loadFamily();
+  }
+
+ },[loadFamily, loadProfile, user, token]);
 
 
 
@@ -199,7 +197,7 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
   ) : (
     <TouchableOpacity
       style={styles.familyEmptyLink}
-      onPress={() => router.push('/(tabs)/family')}
+      onPress={() => router.push('/family' as never)}
     >
       <Text style={styles.familyEmptyText}>
         No family yet · Go to Family tab to create or join →
@@ -281,7 +279,7 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
 
   <TouchableOpacity
 
-   onPress={()=>router.push("/profile")}
+    onPress={()=>router.push("/profile" as never)}
 
    style={styles.editBtn}
 
