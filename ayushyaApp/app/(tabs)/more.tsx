@@ -46,10 +46,11 @@ interface HealthProfile {
 interface MoreProps {
  dosha:Dosha;
  onLogout:()=>void;
+ onRetakeQuiz:()=>void;
 }
 
 
-export default function More({dosha:_dosha,onLogout}:MoreProps){
+export default function More({dosha:_dosha,onLogout,onRetakeQuiz}:MoreProps){
 
  const {user,token,logout} = useAuth();
 
@@ -337,6 +338,24 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
   </TouchableOpacity>
 
 
+
+  <TouchableOpacity
+
+    onPress={onRetakeQuiz}
+
+   style={styles.retakeBtn}
+
+  >
+
+   <Text style={styles.retakeText}>
+
+    Retake dosha profile quiz
+
+   </Text>
+
+  </TouchableOpacity>
+
+
  </View>
 
 
@@ -600,6 +619,30 @@ const styles = StyleSheet.create({
 
 
  editText:{fontWeight:"600"},
+
+
+
+ retakeBtn:{
+
+  marginTop:10,
+
+  backgroundColor:"#f0f7f2",
+
+  padding:10,
+
+  borderRadius:8,
+
+  alignItems:"center",
+
+  borderWidth:1,
+
+  borderColor:"#cfe3d4"
+
+ },
+
+
+
+ retakeText:{fontWeight:"700",color:"#2d6a4f"},
 
 
 

@@ -18,6 +18,7 @@ import { initDatabase } from '../utils/database';
 
 type Screen = 'hero' | 'quiz' | 'result' | 'app' | 'login' | 'register';
 type Tab = 'dash' | 'recs' | 'satmya' | 'pairing' | 'aqi' | 'family' | 'more';
+type QuizMode = 'initial' | 'retake';
 
 interface Dosha {
   vata: number;
@@ -30,6 +31,7 @@ export default function Index() {
   const [screen, setScreen] = useState<Screen>('hero');
   const [tab, setTab] = useState<Tab>('dash');
   const [dosha, setDosha] = useState<Dosha>({ vata: 60, pitta: 25, kapha: 15 });
+  const [quizMode, setQuizMode] = useState<QuizMode>('initial');
 
   // Initialize database on app start
   useEffect(() => {
@@ -48,6 +50,7 @@ export default function Index() {
     if (!user) {
       setScreen('login');
       setTab('dash');
+      setQuizMode('initial');
     }
   }, [user]);
 
@@ -67,12 +70,26 @@ export default function Index() {
     return <Login onLoginSuccess={() => setScreen('hero')} onSwitchToRegister={() => setScreen('register')} />;
   }
 
+  const isQuizFlow = !user.quizCompleted || quizMode === 'retake';
+
   // User is logged in, check if quiz is completed
-  if (!user.quizCompleted) {
+  if (isQuizFlow) {
     // User hasn't completed quiz yet, show quiz flow
     if (screen === 'hero') return <Hero onStart={() => setScreen('quiz')} />;
     if (screen === 'quiz') return <Quiz onDone={(d: Dosha) => { setDosha(d); setScreen('result'); }} />;
-    if (screen === 'result') return <Result dosha={dosha} onContinue={() => setScreen('app')} />;
+    if (screen === 'result') {
+      return (
+        <Result
+          dosha={dosha}
+          retakeMode={quizMode === 'retake'}
+          onContinue={() => {
+            setQuizMode('initial');
+            setTab('dash');
+            setScreen('app');
+          }}
+        />
+      );
+    }
   } else {
     // Quiz already completed, skip straight to app
     if (screen !== 'app') {
@@ -89,7 +106,7 @@ export default function Index() {
       case 'pairing': return <Pairing dosha={dosha} />;
       case 'aqi':     return <AQI />;
       case 'family':  return <Family />;
-      case 'more':    return <More dosha={dosha} onLogout={() => setScreen('login')} />;
+      case 'more':    return <More dosha={dosha} onLogout={() => setScreen('login')} onRetakeQuiz={() => { setQuizMode('retake'); setScreen('hero'); }} />;
       default:        return null;
     }
   };

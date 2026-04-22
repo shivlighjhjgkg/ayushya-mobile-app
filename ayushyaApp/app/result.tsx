@@ -16,9 +16,10 @@ interface Dosha {
 interface ResultProps {
   dosha: Dosha;
   onContinue: () => void;
+  retakeMode?: boolean;
 }
 
-export default function Result({ dosha, onContinue }: ResultProps) {
+export default function Result({ dosha, onContinue, retakeMode = false }: ResultProps) {
   const { user, updateUserDosha, token } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,12 @@ export default function Result({ dosha, onContinue }: ResultProps) {
 
     if (result.success) {
       console.log('✅ Quiz saved successfully');
+      if (retakeMode) {
+        updateUserDosha(dosha);
+        onContinue();
+        return;
+      }
+
       // Don't update user context yet - wait until profile form completes
       // This keeps the form visible instead of skipping to dashboard
       setShowProfile(true);
@@ -102,7 +109,7 @@ export default function Result({ dosha, onContinue }: ResultProps) {
           disabled={loading}
         >
           <Text style={styles.btnText}>
-            {loading ? 'Saving...' : 'Complete Profile'}
+            {loading ? 'Saving...' : retakeMode ? 'Save New Dosha Profile' : 'Complete Profile'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
