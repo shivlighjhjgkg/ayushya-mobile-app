@@ -1,8 +1,7 @@
 // app/(tabs)/aqi.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AqiBadge from '../../components/AqiBadge';
-import AqiRouteMap from '@/components/AqiRouteMap';
 import { getSegmentClass } from '../../utils/aqiHelpers';
 import {
   getAqiRouteRecommendations,
@@ -26,46 +25,6 @@ export default function AQI() {
   const [fromSelected, setFromSelected] = useState<LocationSuggestion | null>(null);
   const [toSelected, setToSelected] = useState<LocationSuggestion | null>(null);
   const [activeInput, setActiveInput] = useState<'from' | 'to' | null>(null);
-
-  const activeRoute = useMemo(() => {
-    if (!results || results.length === 0) {
-      return null;
-    }
-
-    if (openRoute !== null && results[openRoute]) {
-      return results[openRoute];
-    }
-
-    return results[0];
-  }, [results, openRoute]);
-
-  const mapRegion = useMemo(() => {
-    if (!activeRoute) {
-      return {
-        latitude: 12.9716,
-        longitude: 77.5946,
-        latitudeDelta: 0.12,
-        longitudeDelta: 0.12,
-      };
-    }
-
-    const lats = activeRoute.path.map((p) => p.latitude);
-    const lons = activeRoute.path.map((p) => p.longitude);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLon = Math.min(...lons);
-    const maxLon = Math.max(...lons);
-
-    const latitudeDelta = Math.max(0.02, (maxLat - minLat) * 1.8);
-    const longitudeDelta = Math.max(0.02, (maxLon - minLon) * 1.8);
-
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLon + maxLon) / 2,
-      latitudeDelta,
-      longitudeDelta,
-    };
-  }, [activeRoute]);
 
   useEffect(() => {
     const handle = setTimeout(async () => {
@@ -118,14 +77,12 @@ export default function AQI() {
       to,
       activity as 'jogging' | 'cycling' | 'walking',
       {
-        fromCoord:
-          fromSelected && fromSelected.label === from
-            ? { lat: fromSelected.lat, lon: fromSelected.lon, label: fromSelected.label }
-            : undefined,
-        toCoord:
-          toSelected && toSelected.label === to
-            ? { lat: toSelected.lat, lon: toSelected.lon, label: toSelected.label }
-            : undefined,
+        fromCoord: fromSelected && fromSelected.label === from
+          ? { lat: fromSelected.lat, lon: fromSelected.lon, label: fromSelected.label }
+          : undefined,
+        toCoord: toSelected && toSelected.label === to
+          ? { lat: toSelected.lat, lon: toSelected.lon, label: toSelected.label }
+          : undefined,
       }
     );
 
@@ -144,13 +101,13 @@ export default function AQI() {
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <View style={styles.pageHeader}>
         <Text style={styles.pageTitle}>AQI Route Planner</Text>
-        <Text style={styles.pageSub}>Find the cleanest air route for your jog or ride in Bengaluru</Text>
+        <Text style={styles.pageSub}>Find the cleanest air route for your jog or ride anywhere in India</Text>
       </View>
 
       {/* Form Card */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Plan Your Route</Text>
-        <Text style={styles.cardSub}>Enter your start & end points. We'll find the route with the best air quality.</Text>
+        <Text style={styles.cardSub}>Enter your start and destination points. We will find route options with better air quality.</Text>
 
         <Text style={styles.inputLabel}>Starting Point</Text>
         <View style={styles.inputWrap}>
@@ -241,14 +198,6 @@ export default function AQI() {
       </View>
 
       {/* Results */}
-      {results && activeRoute ? (
-        <View style={styles.mapCard}>
-          <Text style={styles.mapTitle}>Route Map</Text>
-          <Text style={styles.mapSub}>Showing {activeRoute.name}</Text>
-          <AqiRouteMap route={activeRoute} region={mapRegion} fromLabel={from} toLabel={to} />
-        </View>
-      ) : null}
-
       {errorMsg ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 34, marginBottom: 12 }}>⚠️</Text>
@@ -333,9 +282,6 @@ const styles = StyleSheet.create({
   activityLabelActive: { color: '#2d6a4f', fontWeight: '600' },
   findBtn: { backgroundColor: '#4a9b5f', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   findBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  mapCard: { backgroundColor: '#fff', borderRadius: 16, padding: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  mapTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
-  mapSub: { fontSize: 12, color: '#777', marginTop: 2, marginBottom: 8 },
   emptyState: { backgroundColor: '#fff', borderRadius: 16, padding: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 15, color: '#888', fontWeight: '500' },
   emptySub: { fontSize: 13, color: '#aaa', marginTop: 4, textAlign: 'center' },

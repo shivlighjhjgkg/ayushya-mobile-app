@@ -30,16 +30,29 @@ app.use(express.urlencoded({ extended: true }));
 
 
 // ==================== MONGODB CONNECTION ====================
-mongoose
-  .connect(process.env.MONGODB_URI)
-  .then(() => {
+async function startServer() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
     console.log('✅ MongoDB connected successfully');
     console.log('📊 Database: ayushya');
-  })
-  .catch((err) => {
+
+    // ==================== START SERVER ====================
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📶 Listening on 0.0.0.0:${PORT}`);
+      console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+      console.log(`\nAvailable endpoints:`);
+      console.log(`  GET  /`);
+      console.log(`  GET  /health`);
+      console.log(`  POST /api/auth/register`);
+      console.log(`  POST /api/auth/login\n`);
+    });
+  } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
     process.exit(1);
-  });
+  }
+}
 
 // ==================== BASIC ROUTE ====================
 app.get('/', (req, res) => {
@@ -90,14 +103,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ==================== START SERVER ====================
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV}`);
-  console.log(`\nAvailable endpoints:`);
-  console.log(`  GET  /`);
-  console.log(`  GET  /health`);
-  console.log(`  POST /api/auth/register`);
-  console.log(`  POST /api/auth/login\n`);
-});
+startServer();

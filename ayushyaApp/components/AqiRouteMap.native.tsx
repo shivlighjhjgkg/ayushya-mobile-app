@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import type { AqiRoute } from '../utils/api';
 
 interface Region {
@@ -18,7 +18,11 @@ interface AqiRouteMapProps {
 
 export default function AqiRouteMap({ route, region, fromLabel, toLabel }: AqiRouteMapProps) {
   return (
-    <MapView style={styles.map} initialRegion={region} region={region}>
+    <MapView style={styles.map} initialRegion={region} region={region} mapType="none">
+      <UrlTile
+        urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        maximumZ={19}
+      />
       <Polyline
         coordinates={route.path}
         strokeWidth={5}

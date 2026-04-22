@@ -1,22 +1,59 @@
 // utils/api.ts
 // API Service for MongoDB Backend Communication
+import { NativeModules, Platform } from 'react-native';
 
-// Environment detection - Better logic for web vs mobile
-let API_BASE_URL = 'http://localhost:5000'; // Default to web
+// Environment detection for Android Studio / React Native runtime.
+const isReactNative = typeof window !== 'undefined' && window.navigator.product === 'ReactNative';
 
-// Check if we're in React Native (mobile)
-if (typeof window !== 'undefined' && window.navigator.product === 'ReactNative') {
-  API_BASE_URL = 'http://10.0.2.2:5000'; // Android emulator
+function extractDevHostIp(): string | null {
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL || '';
+    if (typeof scriptURL === 'string' && scriptURL.length > 0) {
+      // Example: http://192.168.1.23:8081/index.bundle?platform=android
+      const match = scriptURL.match(/(?:http|https):\/\/([^/:]+)/i);
+      return match?.[1] || null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-// Override with env var if set
-if (process.env.EXPO_PUBLIC_API_URL) {
-  API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (!value || seen.has(value)) {
+      return false;
+    }
+    seen.add(value);
+    return true;
+  });
 }
+
+function buildApiBaseCandidates(): string[] {
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  const devHostIp = extractDevHostIp();
+
+  const emulatorCandidates = ['http://10.0.2.2:5000', 'http://127.0.0.1:5000', 'http://localhost:5000'];
+  const deviceCandidates = [devHostIp ? `http://${devHostIp}:5000` : '', 'http://10.0.2.2:5000', 'http://127.0.0.1:5000'];
+
+  const mobileCandidates = Platform.OS === 'android'
+    ? [envUrl || '', ...deviceCandidates, ...emulatorCandidates]
+    : [envUrl || '', devHostIp ? `http://${devHostIp}:5000` : '', 'http://localhost:5000'];
+
+  const webCandidates = [envUrl || '', 'http://localhost:5000'];
+
+  return uniqueStrings(isReactNative ? mobileCandidates : webCandidates);
+}
+
+const API_BASE_CANDIDATES = buildApiBaseCandidates();
+let API_BASE_URL = API_BASE_CANDIDATES[0] || 'http://localhost:5000';
 
 console.log('🌐 Environment Check:');
-console.log('  Platform:', typeof window !== 'undefined' && window.navigator.product === 'ReactNative' ? 'React Native Mobile' : 'Web Browser');
+console.log('  Platform:', isReactNative ? 'React Native Mobile' : 'Web Browser');
 console.log('  🔗 API_BASE_URL:', API_BASE_URL);
+console.log('  🧭 API_BASE_CANDIDATES:', API_BASE_CANDIDATES);
 
 // ==================== CONNECTIVITY TEST ====================
 /**
@@ -104,49 +141,68 @@ async function apiCall<T>(
     options.body = JSON.stringify(body);
   }
 
-  const fullUrl = `${API_BASE_URL}${endpoint}`;
-  console.log(`📡 API Call: ${method} ${fullUrl}`);
+  const preferred = [API_BASE_URL, ...API_BASE_CANDIDATES.filter((c) => c !== API_BASE_URL)];
   console.log(`📤 Request Body:`, body);
 
   try {
-    // Create an abort controller with 10 second timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let lastNetworkError: any = null;
 
-    const response = await fetch(fullUrl, {
-      ...options,
-      signal: controller.signal,
-    });
+    for (const baseUrl of preferred) {
+      const fullUrl = `${baseUrl}${endpoint}`;
+      console.log(`📡 API Call: ${method} ${fullUrl}`);
 
-    clearTimeout(timeoutId);
+      // Create an abort controller with 10 second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    console.log(`📥 Response Status: ${response.status}`);
+      try {
+        const response = await fetch(fullUrl, {
+          ...options,
+          signal: controller.signal,
+        });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      console.error(`❌ API Error [${response.status}]:`, errorData);
-      throw new Error(errorData.message || `HTTP ${response.status}`);
+        clearTimeout(timeoutId);
+
+        console.log(`📥 Response Status (${baseUrl}): ${response.status}`);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.error(`❌ API Error [${response.status}]:`, errorData);
+          throw new Error(errorData.message || `HTTP ${response.status}`);
+        }
+
+        // Success: keep the working base URL for next calls.
+        API_BASE_URL = baseUrl;
+        const data = await response.json();
+        console.log(`✅ Response Data:`, data);
+        return data;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+
+        // Abort/network errors should try next candidate; logical HTTP errors should fail fast.
+        const isAbort = error?.name === 'AbortError';
+        const isNetwork = error instanceof TypeError && error.message === 'Failed to fetch';
+
+        if (isAbort || isNetwork) {
+          lastNetworkError = error;
+          continue;
+        }
+
+        throw error;
+      }
     }
 
-    const data = await response.json();
-    console.log(`✅ Response Data:`, data);
-    return data;
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
+    if (lastNetworkError?.name === 'AbortError') {
       console.error(`❌ API Timeout [${method} ${endpoint}]: Request took too long`);
       throw new Error('Request timeout - server not responding');
     }
-    
-    // Network error - backend not reachable
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      console.error(`❌ Cannot reach backend at: ${API_BASE_URL}`);
-      console.error('   Possible causes:');
-      console.error('   1. Backend not running (npm start in backend folder)');
-      console.error('   2. Wrong API_BASE_URL:', API_BASE_URL);
-      console.error('   3. Network/firewall blocking connection');
-      throw new Error(`Cannot reach backend at ${API_BASE_URL}. Make sure backend is running: cd backend && npm start`);
-    }
-    
+
+    console.error(`❌ Cannot reach backend using candidates:`, preferred);
+    throw new Error(
+      `Cannot reach backend. Tried: ${preferred.join(', ')}. ` +
+      `If using a physical Android device, set EXPO_PUBLIC_API_URL to your PC LAN IP (e.g. http://192.168.x.x:5000).`
+    );
+  } catch (error: any) {
     console.error(`❌ API Error [${method} ${endpoint}]:`, error);
     throw error;
   }
@@ -723,85 +779,28 @@ type GeocodeResultWithCoords = GeocodeResult & {
   longitude: number;
 };
 
-const BENGALURU_LOCALITY_COORDS: Record<string, { lat: number; lon: number; label: string }> = {
-  koramangala: { lat: 12.9352, lon: 77.6245, label: 'Koramangala, Bengaluru' },
-  indiranagar: { lat: 12.9784, lon: 77.6408, label: 'Indiranagar, Bengaluru' },
-  whitefield: { lat: 12.9698, lon: 77.7499, label: 'Whitefield, Bengaluru' },
-  marathahalli: { lat: 12.9569, lon: 77.7011, label: 'Marathahalli, Bengaluru' },
-  jayanagar: { lat: 12.9250, lon: 77.5938, label: 'Jayanagar, Bengaluru' },
-  yelahanka: { lat: 13.1005, lon: 77.5963, label: 'Yelahanka, Bengaluru' },
-  malleshwaram: { lat: 13.0034, lon: 77.5706, label: 'Malleshwaram, Bengaluru' },
-  electroniccity: { lat: 12.8456, lon: 77.6603, label: 'Electronic City, Bengaluru' },
+type PhotonFeature = {
+  geometry?: {
+    coordinates?: [number, number];
+  };
+  properties?: {
+    name?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  };
 };
 
-const LOCALITY_ALIASES: Record<string, string> = {
-  kormangala: 'koramangala',
-  koramgala: 'koramangala',
-  indranagar: 'indiranagar',
-  malleswaram: 'malleshwaram',
-  ecity: 'electroniccity',
-  electroniccityphase1: 'electroniccity',
-  electroniccityphase2: 'electroniccity',
+type OsrmRoute = {
+  distance: number;
+  duration: number;
+  geometry?: {
+    coordinates?: [number, number][];
+  };
 };
-
-function haversineKm(a: Coord, b: Coord): number {
-  const toRad = (n: number) => (n * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-
-  const h =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-
-  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
 
 function hasCoords(item: GeocodeResult): item is GeocodeResultWithCoords {
   return typeof item.latitude === 'number' && typeof item.longitude === 'number';
-}
-
-function normalizeLocalityKey(input: string): string {
-  return input.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function resolveBengaluruLocalityFallback(query: string): Coord | null {
-  const key = normalizeLocalityKey(query);
-  const aliasedKey = LOCALITY_ALIASES[key] || key;
-  const exact = BENGALURU_LOCALITY_COORDS[aliasedKey];
-
-  if (exact) {
-    return {
-      lat: exact.lat,
-      lon: exact.lon,
-      label: exact.label,
-    };
-  }
-
-  return null;
-}
-
-async function fetchFirstGeocodeResult(query: string): Promise<Coord | null> {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Geocoding failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const first = data?.results?.[0];
-
-  if (!first || typeof first.latitude !== 'number' || typeof first.longitude !== 'number') {
-    return null;
-  }
-
-  return {
-    lat: first.latitude,
-    lon: first.longitude,
-    label: first.name || query,
-  };
 }
 
 function uniqueVariants(variants: string[]): string[] {
@@ -821,15 +820,117 @@ function isIndiaResult(result: GeocodeResult): boolean {
   return country.includes('india');
 }
 
+function toPhotonLabel(feature: PhotonFeature): string {
+  const name = feature.properties?.name || '';
+  const city = feature.properties?.city || '';
+  const state = feature.properties?.state || '';
+  const country = feature.properties?.country || '';
+
+  const parts = [name, city, state, country].map((p) => p.trim()).filter(Boolean);
+  return parts.join(', ');
+}
+
+function coordFromSuggestion(suggestion: LocationSuggestion): Coord {
+  return {
+    lat: suggestion.lat,
+    lon: suggestion.lon,
+    label: suggestion.label,
+  };
+}
+
+async function fetchPhotonSuggestions(query: string, limit: number): Promise<LocationSuggestion[]> {
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(limit, 10))}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Photon lookup failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  const features: PhotonFeature[] = Array.isArray(data?.features) ? data.features : [];
+
+  const mapped = features
+    .map((feature, index) => {
+      const coords = feature.geometry?.coordinates;
+      if (!coords || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
+        return null;
+      }
+
+      const label = toPhotonLabel(feature);
+      if (!label) {
+        return null;
+      }
+
+      return {
+        id: `${label}_${index}_${coords[1]}_${coords[0]}`,
+        label,
+        lat: coords[1],
+        lon: coords[0],
+      } as LocationSuggestion;
+    })
+    .filter((item): item is LocationSuggestion => !!item);
+
+  const indiaFirst = [
+    ...mapped.filter((item) => item.label.toLowerCase().includes('india')),
+    ...mapped.filter((item) => !item.label.toLowerCase().includes('india')),
+  ];
+
+  const dedup = new Set<string>();
+  return indiaFirst.filter((item) => {
+    const key = `${item.label}_${item.lat.toFixed(5)}_${item.lon.toFixed(5)}`;
+    if (dedup.has(key)) {
+      return false;
+    }
+    dedup.add(key);
+    return true;
+  });
+}
+
 async function fetchGeocodeResults(query: string, count: number): Promise<GeocodeResult[]> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=${Math.max(1, Math.min(count, 12))}&language=en&format=json`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Location lookup failed: HTTP ${response.status}`);
+    throw new Error(`Open-Meteo geocoding failed: HTTP ${response.status}`);
   }
 
   const data = await response.json();
   return Array.isArray(data?.results) ? data.results : [];
+}
+
+async function fetchOpenMeteoSuggestions(query: string, limit: number): Promise<LocationSuggestion[]> {
+  const variants = uniqueVariants([query, `${query}, India`]);
+  const allResults = (
+    await Promise.all(variants.map((variant) => fetchGeocodeResults(variant, Math.max(1, Math.min(limit, 10)))))
+  ).flat();
+
+  const indiaFirst = [
+    ...allResults.filter(isIndiaResult),
+    ...allResults.filter((r) => !isIndiaResult(r)),
+  ];
+
+  const dedup = new Set<string>();
+  return indiaFirst
+    .filter(hasCoords)
+    .map((item) => {
+      const city = item.name || '';
+      const admin = item.admin1 ? `, ${item.admin1}` : '';
+      const country = item.country ? `, ${item.country}` : '';
+      return {
+        id: String(item.id || `${city}_${item.latitude}_${item.longitude}`),
+        label: `${city}${admin}${country}`,
+        lat: item.latitude,
+        lon: item.longitude,
+      };
+    })
+    .filter((item) => {
+      const key = `${item.label}_${item.lat.toFixed(5)}_${item.lon.toFixed(5)}`;
+      if (dedup.has(key)) {
+        return false;
+      }
+      dedup.add(key);
+      return true;
+    })
+    .slice(0, Math.max(1, Math.min(limit, 10)));
 }
 
 async function geocodeLocation(query: string): Promise<Coord> {
@@ -838,19 +939,18 @@ async function geocodeLocation(query: string): Promise<Coord> {
     throw new Error('Please enter a valid location');
   }
 
-  const variants = uniqueVariants([trimmed, `${trimmed}, India`]);
-
-  for (const variant of variants) {
-    const result = await fetchFirstGeocodeResult(variant);
-    if (result) {
-      return result;
+  try {
+    const photon = await fetchPhotonSuggestions(trimmed, 1);
+    if (photon.length > 0) {
+      return coordFromSuggestion(photon[0]);
     }
+  } catch {
+    // Fall through to open-meteo geocoder fallback.
   }
 
-  // Last-resort typo handling for common Bengaluru locality misspellings.
-  const fallback = resolveBengaluruLocalityFallback(trimmed);
-  if (fallback) {
-    return fallback;
+  const fallback = await fetchOpenMeteoSuggestions(trimmed, 1);
+  if (fallback.length > 0) {
+    return coordFromSuggestion(fallback[0]);
   }
 
   throw new Error(`Could not locate "${query}". Try choosing from suggestions.`);
@@ -869,38 +969,17 @@ export async function searchLocationSuggestions(
       return { success: true, suggestions: [] };
     }
 
-    const variants = uniqueVariants([trimmed, `${trimmed}, India`]);
-    const allResults = (
-      await Promise.all(variants.map((variant) => fetchGeocodeResults(variant, Math.max(1, Math.min(limit, 10)))))
-    ).flat();
+    let suggestions: LocationSuggestion[] = [];
 
-    const indiaFirst = [
-      ...allResults.filter(isIndiaResult),
-      ...allResults.filter((r) => !isIndiaResult(r)),
-    ];
+    try {
+      suggestions = await fetchPhotonSuggestions(trimmed, limit);
+    } catch {
+      suggestions = [];
+    }
 
-    const seenIds = new Set<string>();
-    const suggestions = indiaFirst
-      .filter(hasCoords)
-      .map((item) => {
-        const city = item.name || '';
-        const admin = item.admin1 ? `, ${item.admin1}` : '';
-        const country = item.country ? `, ${item.country}` : '';
-        return {
-          id: String(item.id || `${city}_${item.latitude}_${item.longitude}`),
-          label: `${city}${admin}${country}`,
-          lat: item.latitude,
-          lon: item.longitude,
-        };
-      })
-      .filter((item) => {
-        const key = `${item.label}_${item.lat.toFixed(5)}_${item.lon.toFixed(5)}`;
-        if (seenIds.has(key)) {
-          return false;
-        }
-        seenIds.add(key);
-        return true;
-      });
+    if (suggestions.length === 0) {
+      suggestions = await fetchOpenMeteoSuggestions(trimmed, limit);
+    }
 
     return {
       success: true,
@@ -940,30 +1019,6 @@ async function fetchAqiAt(lat: number, lon: number): Promise<number> {
   return roundAqi(firstValid);
 }
 
-function midpoint(a: Coord, b: Coord): Coord {
-  return {
-    lat: (a.lat + b.lat) / 2,
-    lon: (a.lon + b.lon) / 2,
-    label: `${a.label} to ${b.label}`,
-  };
-}
-
-function offsetWaypoint(from: Coord, to: Coord, direction: 1 | -1): Coord {
-  const mid = midpoint(from, to);
-  const dLat = to.lat - from.lat;
-  const dLon = to.lon - from.lon;
-  const magnitude = Math.sqrt(dLat * dLat + dLon * dLon) || 0.01;
-  const normLat = -dLon / magnitude;
-  const normLon = dLat / magnitude;
-  const offsetScale = magnitude * 0.2;
-
-  return {
-    lat: mid.lat + normLat * offsetScale * direction,
-    lon: mid.lon + normLon * offsetScale * direction,
-    label: direction > 0 ? 'North arc' : 'South arc',
-  };
-}
-
 function minutesForActivity(distanceKm: number, activity: 'jogging' | 'cycling' | 'walking'): number {
   const speed = activity === 'cycling' ? 18 : activity === 'jogging' ? 8 : 5;
   const hours = distanceKm / speed;
@@ -978,45 +1033,76 @@ function toTimeLabel(minutes: number): string {
   return `${minutes} min`;
 }
 
+function samplePathPoints(path: { latitude: number; longitude: number }[], sampleCount: number): { latitude: number; longitude: number }[] {
+  if (path.length <= sampleCount) {
+    return path;
+  }
+
+  const result: { latitude: number; longitude: number }[] = [];
+  for (let i = 0; i < sampleCount; i += 1) {
+    const ratio = i / (sampleCount - 1);
+    const idx = Math.round(ratio * (path.length - 1));
+    result.push(path[idx]);
+  }
+
+  return result;
+}
+
+async function fetchOsrmRoutes(from: Coord, to: Coord): Promise<OsrmRoute[]> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?alternatives=true&steps=false&overview=full&geometries=geojson`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`OSRM route lookup failed: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+  const routes: OsrmRoute[] = Array.isArray(data?.routes) ? data.routes : [];
+
+  return routes.filter((route) => Array.isArray(route.geometry?.coordinates) && route.geometry!.coordinates!.length > 1);
+}
+
 async function buildRoute(
   id: string,
   name: string,
+  route: OsrmRoute,
   from: Coord,
-  via: Coord,
   to: Coord,
   activity: 'jogging' | 'cycling' | 'walking'
 ): Promise<AqiRoute> {
-  const segmentPoints = [midpoint(from, via), via, midpoint(via, to)];
-  const segmentNames = [
-    `${from.label} -> Midpoint`,
-    `Around ${via.label}`,
-    `Midpoint -> ${to.label}`,
-  ];
+  const path = (route.geometry?.coordinates || []).map(([lon, lat]) => ({
+    latitude: lat,
+    longitude: lon,
+  }));
 
-  const aqiValues = await Promise.all(segmentPoints.map((pt) => fetchAqiAt(pt.lat, pt.lon)));
-  const segments = aqiValues.map((aqi, i) => ({ name: segmentNames[i], aqi }));
+  if (path.length < 2) {
+    throw new Error('Route geometry is invalid');
+  }
+
+  const samples = samplePathPoints(path, 5);
+  const sampleLabels = samples.map((_, idx) => `Path sample ${idx + 1}`);
+
+  const aqiValues = await Promise.all(samples.map((pt) => fetchAqiAt(pt.latitude, pt.longitude)));
+  const segments = aqiValues.map((aqi, i) => ({ name: sampleLabels[i], aqi }));
   const avgAqi = roundAqi(aqiValues.reduce((sum, n) => sum + n, 0) / aqiValues.length);
   const maxAqi = Math.max(...aqiValues);
 
-  const totalDistance = haversineKm(from, via) + haversineKm(via, to);
-  const totalMinutes = minutesForActivity(totalDistance, activity);
+  const totalDistanceKm = (route.distance || 0) / 1000;
+  const totalMinutes = minutesForActivity(totalDistanceKm, activity);
+  const midPoint = path[Math.floor(path.length / 2)];
 
   return {
     id,
     name,
-    dist: toKmLabel(totalDistance),
+    dist: toKmLabel(totalDistanceKm),
     time: toTimeLabel(totalMinutes),
     avgAqi,
     maxAqi,
     segments,
     from: { latitude: from.lat, longitude: from.lon, label: from.label },
     to: { latitude: to.lat, longitude: to.lon, label: to.label },
-    via: { latitude: via.lat, longitude: via.lon, label: via.label },
-    path: [
-      { latitude: from.lat, longitude: from.lon, label: from.label },
-      { latitude: via.lat, longitude: via.lon, label: via.label },
-      { latitude: to.lat, longitude: to.lon, label: to.label },
-    ],
+    via: { latitude: midPoint.latitude, longitude: midPoint.longitude, label: 'Route midpoint' },
+    path,
   };
 }
 
@@ -1041,15 +1127,14 @@ export async function getAqiRouteRecommendations(
       ? { lat: options.toCoord.lat, lon: options.toCoord.lon, label: options.toCoord.label || toText }
       : await geocodeLocation(toText);
 
-    const arcNorth = offsetWaypoint(from, to, 1);
-    const arcSouth = offsetWaypoint(from, to, -1);
-    const center = midpoint(from, to);
+    const osrmRoutes = await fetchOsrmRoutes(from, to);
+    if (osrmRoutes.length === 0) {
+      throw new Error('No route found between selected locations');
+    }
 
-    const routes = await Promise.all([
-      buildRoute('cleanest-1', 'Central corridor', from, center, to, activity),
-      buildRoute('cleanest-2', 'North detour', from, arcNorth, to, activity),
-      buildRoute('cleanest-3', 'South detour', from, arcSouth, to, activity),
-    ]);
+    const routes = await Promise.all(
+      osrmRoutes.slice(0, 3).map((route, idx) => buildRoute(`cleanest-${idx + 1}`, `Route ${idx + 1}`, route, from, to, activity))
+    );
 
     routes.sort((a, b) => a.avgAqi - b.avgAqi);
 
