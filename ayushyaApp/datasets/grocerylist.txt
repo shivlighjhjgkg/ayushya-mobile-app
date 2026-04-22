@@ -1,7 +1,3 @@
-# Grocery Ingredients - Checkbox Vector
-# Total unique ingredients: 1464
-# One ingredient per line - use directly as checkbox labels in your UI
-
 aachi fish masala
 aam papad
 aamras

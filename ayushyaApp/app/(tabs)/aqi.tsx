@@ -1,24 +1,15 @@
 // app/(tabs)/aqi.tsx
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AqiBadge from '../../components/AqiBadge';
+import AqiRouteMap from '@/components/AqiRouteMap';
 import { getSegmentClass } from '../../utils/aqiHelpers';
-import { MOCK_ROUTES } from '../../utils/constants';
-
-interface Segment {
-  name: string;
-  aqi: number;
-}
-
-interface Route {
-  id: string | number;
-  name: string;
-  dist: string;
-  time: string;
-  avgAqi: number;
-  maxAqi: number;
-  segments: Segment[];
-}
+import {
+  getAqiRouteRecommendations,
+  searchLocationSuggestions,
+  type AqiRoute,
+  type LocationSuggestion,
+} from '../../utils/api';
 
 const segColor: Record<string, string> = { g: '#4a9b5f', m: '#f0b930', p: '#e8763a' };
 
@@ -26,13 +17,127 @@ export default function AQI() {
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
   const [activity, setActivity] = useState<string>('jogging');
-  const [results, setResults] = useState<Route[] | null>(null);
+  const [results, setResults] = useState<AqiRoute[] | null>(null);
   const [openRoute, setOpenRoute] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fromSuggestions, setFromSuggestions] = useState<LocationSuggestion[]>([]);
+  const [toSuggestions, setToSuggestions] = useState<LocationSuggestion[]>([]);
+  const [fromSelected, setFromSelected] = useState<LocationSuggestion | null>(null);
+  const [toSelected, setToSelected] = useState<LocationSuggestion | null>(null);
+  const [activeInput, setActiveInput] = useState<'from' | 'to' | null>(null);
 
-  const search = () => {
+  const activeRoute = useMemo(() => {
+    if (!results || results.length === 0) {
+      return null;
+    }
+
+    if (openRoute !== null && results[openRoute]) {
+      return results[openRoute];
+    }
+
+    return results[0];
+  }, [results, openRoute]);
+
+  const mapRegion = useMemo(() => {
+    if (!activeRoute) {
+      return {
+        latitude: 12.9716,
+        longitude: 77.5946,
+        latitudeDelta: 0.12,
+        longitudeDelta: 0.12,
+      };
+    }
+
+    const lats = activeRoute.path.map((p) => p.latitude);
+    const lons = activeRoute.path.map((p) => p.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+
+    const latitudeDelta = Math.max(0.02, (maxLat - minLat) * 1.8);
+    const longitudeDelta = Math.max(0.02, (maxLon - minLon) * 1.8);
+
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLon + maxLon) / 2,
+      latitudeDelta,
+      longitudeDelta,
+    };
+  }, [activeRoute]);
+
+  useEffect(() => {
+    const handle = setTimeout(async () => {
+      if (activeInput !== 'from') {
+        return;
+      }
+
+      const response = await searchLocationSuggestions(from, 5);
+      setFromSuggestions(response.success && response.suggestions ? response.suggestions : []);
+    }, 300);
+
+    return () => clearTimeout(handle);
+  }, [from, activeInput]);
+
+  useEffect(() => {
+    const handle = setTimeout(async () => {
+      if (activeInput !== 'to') {
+        return;
+      }
+
+      const response = await searchLocationSuggestions(to, 5);
+      setToSuggestions(response.success && response.suggestions ? response.suggestions : []);
+    }, 300);
+
+    return () => clearTimeout(handle);
+  }, [to, activeInput]);
+
+  const selectFromSuggestion = (suggestion: LocationSuggestion) => {
+    setFrom(suggestion.label);
+    setFromSelected(suggestion);
+    setFromSuggestions([]);
+    setActiveInput(null);
+  };
+
+  const selectToSuggestion = (suggestion: LocationSuggestion) => {
+    setTo(suggestion.label);
+    setToSelected(suggestion);
+    setToSuggestions([]);
+    setActiveInput(null);
+  };
+
+  const search = async () => {
     if (!from || !to) return;
-    const filtered = [...MOCK_ROUTES].sort((a: Route, b: Route) => a.avgAqi - b.avgAqi);
-    setResults(filtered);
+
+    setIsLoading(true);
+    setErrorMsg(null);
+
+    const response = await getAqiRouteRecommendations(
+      from,
+      to,
+      activity as 'jogging' | 'cycling' | 'walking',
+      {
+        fromCoord:
+          fromSelected && fromSelected.label === from
+            ? { lat: fromSelected.lat, lon: fromSelected.lon, label: fromSelected.label }
+            : undefined,
+        toCoord:
+          toSelected && toSelected.label === to
+            ? { lat: toSelected.lat, lon: toSelected.lon, label: toSelected.label }
+            : undefined,
+      }
+    );
+
+    if (response.success && response.routes) {
+      setResults(response.routes);
+      setOpenRoute(null);
+    } else {
+      setResults(null);
+      setErrorMsg(response.message || 'Could not fetch AQI route data right now.');
+    }
+
+    setIsLoading(false);
   };
 
   return (
@@ -54,10 +159,28 @@ export default function AQI() {
             style={styles.input}
             placeholder="e.g. Koramangala, Bengaluru"
             value={from}
-            onChangeText={setFrom}
+            onFocus={() => setActiveInput('from')}
+            onChangeText={(value) => {
+              setFrom(value);
+              setFromSelected(null);
+              setActiveInput('from');
+            }}
             placeholderTextColor="#aaa"
           />
         </View>
+        {activeInput === 'from' && fromSuggestions.length > 0 && (
+          <View style={styles.suggestionsWrap}>
+            {fromSuggestions.map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion.id}
+                style={styles.suggestionRow}
+                onPress={() => selectFromSuggestion(suggestion)}
+              >
+                <Text style={styles.suggestionText}>{suggestion.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.inputLabel}>Destination</Text>
         <View style={styles.inputWrap}>
@@ -66,10 +189,28 @@ export default function AQI() {
             style={styles.input}
             placeholder="e.g. Indiranagar, Bengaluru"
             value={to}
-            onChangeText={setTo}
+            onFocus={() => setActiveInput('to')}
+            onChangeText={(value) => {
+              setTo(value);
+              setToSelected(null);
+              setActiveInput('to');
+            }}
             placeholderTextColor="#aaa"
           />
         </View>
+        {activeInput === 'to' && toSuggestions.length > 0 && (
+          <View style={styles.suggestionsWrap}>
+            {toSuggestions.map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion.id}
+                style={styles.suggestionRow}
+                onPress={() => selectToSuggestion(suggestion)}
+              >
+                <Text style={styles.suggestionText}>{suggestion.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.activityLabel}>Activity Type</Text>
         <View style={styles.activityRow}>
@@ -86,20 +227,39 @@ export default function AQI() {
         </View>
 
         <TouchableOpacity
-          style={[styles.findBtn, (!from || !to) && { opacity: 0.4 }]}
-          onPress={search}
-          disabled={!from || !to}
+          style={[styles.findBtn, (!from || !to || isLoading) && { opacity: 0.4 }]}
+          onPress={() => {
+            setActiveInput(null);
+            setFromSuggestions([]);
+            setToSuggestions([]);
+            search();
+          }}
+          disabled={!from || !to || isLoading}
         >
-          <Text style={styles.findBtnText}>Find Best Routes</Text>
+          <Text style={styles.findBtnText}>{isLoading ? 'Finding Routes...' : 'Find Best Routes'}</Text>
         </TouchableOpacity>
       </View>
 
       {/* Results */}
-      {!results ? (
+      {results && activeRoute ? (
+        <View style={styles.mapCard}>
+          <Text style={styles.mapTitle}>Route Map</Text>
+          <Text style={styles.mapSub}>Showing {activeRoute.name}</Text>
+          <AqiRouteMap route={activeRoute} region={mapRegion} fromLabel={from} toLabel={to} />
+        </View>
+      ) : null}
+
+      {errorMsg ? (
+        <View style={styles.emptyState}>
+          <Text style={{ fontSize: 34, marginBottom: 12 }}>⚠️</Text>
+          <Text style={styles.emptyTitle}>Could not fetch live AQI</Text>
+          <Text style={styles.emptySub}>{errorMsg}</Text>
+        </View>
+      ) : !results ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>🌬️</Text>
           <Text style={styles.emptyTitle}>Enter your route details</Text>
-          <Text style={styles.emptySub}>Results will appear here with AQI breakdown per segment</Text>
+          <Text style={styles.emptySub}>Results will appear here with live AQI breakdown per segment</Text>
         </View>
       ) : (
         <View>
@@ -161,6 +321,9 @@ const styles = StyleSheet.create({
   inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 10, paddingHorizontal: 12, marginBottom: 14, backgroundColor: '#fafafa' },
   inputPin: { fontSize: 16, marginRight: 8 },
   input: { flex: 1, height: 44, fontSize: 14, color: '#333' },
+  suggestionsWrap: { marginTop: -8, marginBottom: 10, borderWidth: 1, borderColor: '#e6e6e6', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
+  suggestionRow: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f1f1' },
+  suggestionText: { fontSize: 13, color: '#333' },
   activityLabel: { fontSize: 12, fontWeight: '600', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   activityRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   activityBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#e0e0e0', backgroundColor: '#fafafa' },
@@ -170,6 +333,9 @@ const styles = StyleSheet.create({
   activityLabelActive: { color: '#2d6a4f', fontWeight: '600' },
   findBtn: { backgroundColor: '#4a9b5f', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   findBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  mapCard: { backgroundColor: '#fff', borderRadius: 16, padding: 12, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  mapTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+  mapSub: { fontSize: 12, color: '#777', marginTop: 2, marginBottom: 8 },
   emptyState: { backgroundColor: '#fff', borderRadius: 16, padding: 40, alignItems: 'center' },
   emptyTitle: { fontSize: 15, color: '#888', fontWeight: '500' },
   emptySub: { fontSize: 13, color: '#aaa', marginTop: 4, textAlign: 'center' },
