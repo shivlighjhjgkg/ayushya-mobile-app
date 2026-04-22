@@ -18,6 +18,16 @@ function extractTokenUserId(req) {
   return token.split('_')[0];
 }
 
+function getTodayRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+
+  return { start, end };
+}
+
 router.post('/:userId', async (req, res) => {
   try {
     const tokenUserId = extractTokenUserId(req);
@@ -99,6 +109,83 @@ router.get('/:userId/recent', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch recent meal feedback',
+    });
+  }
+});
+
+router.get('/:userId/summary', async (req, res) => {
+  try {
+    const tokenUserId = extractTokenUserId(req);
+
+    if (!tokenUserId) {
+      return res.status(401).json({
+        success: false,
+        message: 'No token provided',
+      });
+    }
+
+    if (tokenUserId !== req.params.userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized - token does not match userId',
+      });
+    }
+
+    const { start, end } = getTodayRange();
+
+    const logs = await MealFeedback.find({
+      userId: req.params.userId,
+      loggedAt: { $gte: start, $lt: end },
+    }).sort({ loggedAt: -1, _id: -1 });
+
+    const goodCounts = new Map();
+    const latestGoodLogByMeal = new Map();
+
+    logs.forEach((log) => {
+      if (log.feedback !== 'good') {
+        return;
+      }
+
+      const currentCount = goodCounts.get(log.mealName) || 0;
+      goodCounts.set(log.mealName, currentCount + 1);
+
+      if (!latestGoodLogByMeal.has(log.mealName)) {
+        latestGoodLogByMeal.set(log.mealName, log);
+      }
+    });
+
+    let topFoodToday = null;
+    let topFoodGoodCount = 0;
+    let topFoodLatest = null;
+
+    for (const [mealName, count] of goodCounts.entries()) {
+      const latestLog = latestGoodLogByMeal.get(mealName);
+
+      if (
+        count > topFoodGoodCount ||
+        (count === topFoodGoodCount && latestLog && topFoodLatest && latestLog.loggedAt > topFoodLatest.loggedAt)
+      ) {
+        topFoodToday = mealName;
+        topFoodGoodCount = count;
+        topFoodLatest = latestLog;
+      }
+    }
+
+    return res.json({
+      success: true,
+      summary: {
+        mealsLoggedToday: logs.length,
+        topFoodToday,
+        topFoodGoodCount,
+        totalGoodMealsToday: logs.filter((log) => log.feedback === 'good').length,
+        date: start.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Get meal feedback summary error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch meal summary',
     });
   }
 });

@@ -15,6 +15,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ dosha, onNav }: DashboardProps) {
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <View style={styles.pageHeader}>
@@ -83,13 +84,6 @@ export default function Dashboard({ dosha, onNav }: DashboardProps) {
         </View>
       </View>
 
-      {/* Today's Summary */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Todays Summary</Text>
-        <Text style={styles.summaryText}><Text style={styles.summaryBold}>Meals logged:</Text> 2 / 3</Text>
-        <Text style={styles.summaryText}><Text style={styles.summaryBold}>Satmya streak:</Text> 5 days</Text>
-        <Text style={styles.summaryText}><Text style={styles.summaryBold}>Top food today:</Text> Ghee rice 😊</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -127,6 +121,4 @@ const styles = StyleSheet.create({
   quickCard: { alignItems: 'center', backgroundColor: '#f5f9f5', borderRadius: 12, padding: 12, minWidth: 72 },
   quickIcon: { fontSize: 22, marginBottom: 4 },
   quickLabel: { fontSize: 11, color: '#444', textAlign: 'center' },
-  summaryText: { fontSize: 13, color: '#666', lineHeight: 24 },
-  summaryBold: { fontWeight: '700', color: '#1a1a1a' },
 });

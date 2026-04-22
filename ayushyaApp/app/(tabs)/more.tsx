@@ -6,6 +6,19 @@ import { useAuth } from '../../utils/authContext';
 import { getAllUsers, getFamily } from '../../utils/database';
 import { Family, getHealthProfile } from '../../utils/api';
 
+const REGION_LABELS: Record<string, string> = {
+ north: 'North India',
+ east: 'East India',
+ west: 'West India',
+ south: 'South India',
+ global: 'Global',
+};
+
+const SEASON_LABELS: Record<string, string> = {
+ summer: 'Summer',
+ winter: 'Winter',
+};
+
 interface Dosha {
  vata:number;
  pitta:number;
@@ -23,6 +36,8 @@ interface HealthProfile {
  allergens?:string[];
 
  region?:string;
+
+ desha?:string;
 
  season?:string;
 
@@ -270,6 +285,34 @@ export default function More({dosha:_dosha,onLogout}:MoreProps){
    <Text style={styles.profileValue}>
 
     {profile?.allergens?.join(', ') || '-'}
+
+   </Text>
+
+  </View>
+
+
+
+  <View style={styles.profileRow}>
+
+   <Text style={styles.profileLabel}>Region</Text>
+
+   <Text style={styles.profileValue}>
+
+    {profile?.region ? REGION_LABELS[profile.region] || profile.region : profile?.desha ? REGION_LABELS[profile.desha] || profile.desha : '-'}
+
+   </Text>
+
+  </View>
+
+
+
+  <View style={styles.profileRow}>
+
+   <Text style={styles.profileLabel}>Season</Text>
+
+   <Text style={styles.profileValue}>
+
+    {profile?.season ? SEASON_LABELS[profile.season] || profile.season : '-'}
 
    </Text>
 

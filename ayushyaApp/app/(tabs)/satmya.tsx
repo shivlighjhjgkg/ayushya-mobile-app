@@ -9,6 +9,10 @@ import { WeeklyMealPlanDay } from '../../utils/api';
 type FeedbackType = 'good' | 'neutral' | 'bad';
 type MealType = 'breakfast' | 'lunch' | 'dinner';
 
+interface SatmyaProps {
+  onMealLogged?: () => void;
+}
+
 interface LogEntry {
   meal: MealType;
   mealName: string;
@@ -18,7 +22,7 @@ interface LogEntry {
 
 const fbIcon: Record<FeedbackType, string> = { good: '😊', neutral: '😐', bad: '😕' };
 
-export default function Satmya() {
+export default function Satmya({ onMealLogged }: SatmyaProps) {
   const { user, token } = useAuth();
   const [meal, setMeal] = useState<MealType>('breakfast');
   const [food, setFood] = useState<string>('');
@@ -100,6 +104,7 @@ export default function Satmya() {
     setFood('');
     setFb(null);
     setToast(true);
+    onMealLogged?.();
     setTimeout(() => setToast(false), 2200);
   };
 

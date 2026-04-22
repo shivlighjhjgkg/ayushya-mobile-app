@@ -498,6 +498,14 @@ export interface MealFeedbackLog {
   loggedAt: string;
 }
 
+export interface MealSummary {
+  mealsLoggedToday: number;
+  topFoodToday: string | null;
+  topFoodGoodCount: number;
+  totalGoodMealsToday: number;
+  date: string;
+}
+
 export interface AqiSegment {
   name: string;
   aqi: number;
@@ -760,6 +768,30 @@ export async function getRecentMealFeedbackLogs(
     return {
       success: false,
       message: error.message || 'Failed to fetch recent logs',
+    };
+  }
+}
+
+/**
+ * Get today's meal feedback summary
+ */
+export async function getTodayMealSummary(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; summary?: MealSummary; message?: string }> {
+  try {
+    const response = await apiCall<{ success: boolean; summary?: MealSummary; message?: string }>(
+      `/api/meal-feedback/${userId}/summary`,
+      'GET',
+      undefined,
+      token
+    );
+
+    return response;
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error.message || 'Failed to fetch meal summary',
     };
   }
 }

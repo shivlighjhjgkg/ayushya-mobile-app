@@ -1,7 +1,7 @@
 // utils/database.ts
 // Database functions using MongoDB backend via API
 
-import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, getRecommendedWeeklyGroceryList as apiGetRecommendedWeeklyGroceryList, getCurrentWeeklyMealPlan as apiGetCurrentWeeklyMealPlan, saveMealFeedbackLog as apiSaveMealFeedbackLog, getRecentMealFeedbackLogs as apiGetRecentMealFeedbackLogs, type Family, type WeeklyMealPlan, type MealFeedbackLog } from './api';
+import { registerUser as apiRegisterUser, loginUser as apiLoginUser, getUserProfile, saveQuizResults as apiSaveQuizResults, getHealthProfile, updateHealthProfile as apiUpdateHealthProfile, createFamily as apiCreateFamily, joinFamily as apiJoinFamily, getFamily as apiGetFamily, saveWeeklyGroceryList as apiSaveWeeklyGroceryList, getCurrentWeeklyGroceryList as apiGetCurrentWeeklyGroceryList, getRecommendedWeeklyGroceryList as apiGetRecommendedWeeklyGroceryList, getCurrentWeeklyMealPlan as apiGetCurrentWeeklyMealPlan, saveMealFeedbackLog as apiSaveMealFeedbackLog, getRecentMealFeedbackLogs as apiGetRecentMealFeedbackLogs, getTodayMealSummary as apiGetTodayMealSummary, type Family, type WeeklyMealPlan, type MealFeedbackLog, type MealSummary } from './api';
 
 export interface User {
   _id: string;
@@ -494,6 +494,27 @@ export async function getRecentMealFeedbackLogs(
       success: false,
       logs: [],
       message: error.message || 'Failed to fetch meal feedback logs',
+    };
+  }
+}
+
+export async function getTodayMealSummary(
+  userId: string,
+  token: string
+): Promise<{ success: boolean; summary: MealSummary | null; message?: string }> {
+  try {
+    const result = await apiGetTodayMealSummary(userId, token);
+
+    return {
+      success: result.success,
+      summary: result.summary || null,
+      message: result.message,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      summary: null,
+      message: error.message || 'Failed to fetch meal summary',
     };
   }
 }
