@@ -1,6 +1,8 @@
 // app/(tabs)/recs.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { GROCERY_ITEMS } from '../../utils/groceryItems';
 import { getCurrentWeeklyGroceryList, getCurrentWeeklyMealPlan, getRecommendedWeeklyGroceryList, saveWeeklyGroceryList } from '../../utils/database';
 import { useAuth } from '../../utils/authContext';
@@ -16,9 +18,11 @@ export default function Recs() {
   const [mealDays, setMealDays] = useState<WeeklyMealPlanDay[]>([]);
   const [mealPlanLoading, setMealPlanLoading] = useState(false);
   const [mealPlanError, setMealPlanError] = useState<string | null>(null);
+  const [openMealSections, setOpenMealSections] = useState<Record<string, boolean>>({});
   const [recommendedItems, setRecommendedItems] = useState<string[]>([]);
   const [generatingRecommendations, setGeneratingRecommendations] = useState(false);
   const [addingRecommended, setAddingRecommended] = useState(false);
+  const [exportingText, setExportingText] = useState(false);
 
   const filteredGroceries = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -135,6 +139,33 @@ export default function Recs() {
     );
   };
 
+  const sectionKey = (dayIndex: number, section: 'breakfast' | 'lunch' | 'dinner' | 'extras') => `${dayIndex}-${section}`;
+
+  const toggleMealSection = (dayIndex: number, section: 'breakfast' | 'lunch' | 'dinner' | 'extras') => {
+    const key = sectionKey(dayIndex, section);
+    setOpenMealSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderMealSectionCard = (
+    dayIndex: number,
+    section: 'breakfast' | 'lunch' | 'dinner' | 'extras',
+    title: string,
+    dishes: { label: string; meal: MealChoice }[]
+  ) => {
+    const key = sectionKey(dayIndex, section);
+    const isOpen = !!openMealSections[key];
+
+    return (
+      <View style={styles.mealSectionCard}>
+        <TouchableOpacity style={styles.mealSectionHeader} onPress={() => toggleMealSection(dayIndex, section)}>
+          <Text style={styles.mealSectionTitle}>{title}</Text>
+          <Text style={styles.mealSectionArrow}>{isOpen ? '↑' : '›'}</Text>
+        </TouchableOpacity>
+        {isOpen && <View style={styles.mealSectionBody}>{dishes.map((dish) => renderDish(dish.label, dish.meal))}</View>}
+      </View>
+    );
+  };
+
   const handleSaveGroceryList = async () => {
     if (!user || !token) {
       Alert.alert('Login required', 'Please login to save your grocery list.');
@@ -213,6 +244,121 @@ export default function Recs() {
     Alert.alert('Added', 'Recommended items were added to cart and saved for this week.');
   };
 
+  const mealChoiceText = (meal: MealChoice) => {
+    const matched = meal.matchedIngredients || [];
+    const unmatched = meal.unmatchedIngredients || [];
+
+    return [
+      meal.name,
+      matched.length > 0 ? `Good match: ${matched.join(', ')}` : 'Good match: none',
+      unmatched.length > 0 ? `Avoid/less ideal: ${unmatched.join(', ')}` : 'Avoid/less ideal: none',
+    ];
+  };
+
+  const ensureMealPlan = async () => {
+    if (mealDays.length > 0 || !user || !token) {
+      return mealDays;
+    }
+
+    const response = await getCurrentWeeklyMealPlan(user._id, token);
+    return response.success && response.plan ? response.plan.days || [] : [];
+  };
+
+  const buildWeeklyRecommendationText = (groceryItems: string[], weeklyMeals: WeeklyMealPlanDay[], generatedAt: string) => {
+    const lines: string[] = [];
+
+    lines.push('Ayushya Weekly Recommendations');
+    lines.push(`Generated on: ${generatedAt}`);
+    lines.push('');
+    lines.push('Grocery List');
+    lines.push('-------------');
+    if (groceryItems.length > 0) {
+      groceryItems.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item}`);
+      });
+    } else {
+      lines.push('No saved grocery items found.');
+    }
+
+    if (recommendedItems.length > 0) {
+      lines.push('');
+      lines.push('Recommended Grocery Items');
+      lines.push('--------------------------');
+      recommendedItems.forEach((item, index) => {
+        lines.push(`${index + 1}. ${item}`);
+      });
+    }
+
+    lines.push('');
+    lines.push('Weekly Meal Plan');
+    lines.push('----------------');
+
+    if (weeklyMeals.length === 0) {
+      lines.push('No weekly meal plan was available to export.');
+    } else {
+      weeklyMeals.forEach((day) => {
+        lines.push(`\n${day.day}`);
+        lines.push(`Breakfast: ${mealChoiceText(day.breakfast).join(' | ')}`);
+        lines.push(`Lunch Main: ${mealChoiceText(day.lunchMain).join(' | ')}`);
+        lines.push(`Lunch Side: ${mealChoiceText(day.lunchSide).join(' | ')}`);
+        lines.push(`Dinner Main: ${mealChoiceText(day.dinnerMain).join(' | ')}`);
+        lines.push(`Dinner Side: ${mealChoiceText(day.dinnerSide).join(' | ')}`);
+        lines.push(`Appetizer: ${mealChoiceText(day.appetizer).join(' | ')}`);
+        lines.push(`Dessert: ${mealChoiceText(day.dessert).join(' | ')}`);
+      });
+    }
+
+    return lines.join('\n');
+  };
+
+  const downloadTextFileWeb = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportText = async () => {
+    if (!user || !token) {
+      Alert.alert('Login required', 'Please login to export your weekly recommendation.');
+      return;
+    }
+
+    setExportingText(true);
+
+    try {
+      const groceryItems = GROCERY_ITEMS.filter((_, index) => checked[index]);
+      const weeklyMeals = await ensureMealPlan();
+      const text = buildWeeklyRecommendationText(groceryItems, weeklyMeals, new Date().toLocaleString());
+      const filename = `ayushya-weekly-recommendations-${Date.now()}.txt`;
+
+      if (Platform.OS === 'web') {
+        downloadTextFileWeb(text, filename);
+      } else {
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(fileUri, text, { encoding: FileSystem.EncodingType.UTF8 });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'text/plain',
+            dialogTitle: 'Weekly Recommendations TXT',
+          });
+        } else {
+          Alert.alert('TXT created', `Saved at ${fileUri}`);
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Export failed', error?.message || 'Could not create the PDF.');
+    } finally {
+      setExportingText(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <View style={styles.pageHeader}>
@@ -226,6 +372,16 @@ export default function Recs() {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tabBtn, tab === 'meals' && styles.tabBtnActive]} onPress={() => setTab('meals')}>
           <Text style={[styles.tabBtnText, tab === 'meals' && styles.tabBtnTextActive]}>🍲 Meal Plan</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.exportRow}>
+        <TouchableOpacity
+          style={[styles.exportBtn, exportingText && styles.saveCartBtnDisabled]}
+          onPress={handleExportText}
+          disabled={exportingText}
+        >
+          <Text style={styles.exportBtnText}>{exportingText ? 'Exporting...' : 'TXT export: weekly plan + grocery list'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -314,13 +470,21 @@ export default function Recs() {
               </TouchableOpacity>
               {openDay === i && (
                 <View style={styles.mealDayBody}>
-                  {renderDish('Breakfast', m.breakfast)}
-                  {renderDish('Lunch Main', m.lunchMain)}
-                  {renderDish('Lunch Side', m.lunchSide)}
-                  {renderDish('Dinner Main', m.dinnerMain)}
-                  {renderDish('Dinner Side', m.dinnerSide)}
-                  {renderDish('Appetizer', m.appetizer)}
-                  {renderDish('Dessert', m.dessert)}
+                  {renderMealSectionCard(i, 'breakfast', 'Breakfast', [
+                    { label: 'Breakfast', meal: m.breakfast },
+                  ])}
+                  {renderMealSectionCard(i, 'lunch', 'Lunch', [
+                    { label: 'Lunch Main', meal: m.lunchMain },
+                    { label: 'Lunch Side', meal: m.lunchSide },
+                  ])}
+                  {renderMealSectionCard(i, 'dinner', 'Dinner', [
+                    { label: 'Dinner Main', meal: m.dinnerMain },
+                    { label: 'Dinner Side', meal: m.dinnerSide },
+                  ])}
+                  {renderMealSectionCard(i, 'extras', 'Extras', [
+                    { label: 'Appetizer', meal: m.appetizer },
+                    { label: 'Dessert', meal: m.dessert },
+                  ])}
                 </View>
               )}
             </View>
@@ -346,11 +510,14 @@ const styles = StyleSheet.create({
   tabBtnActive: { backgroundColor: '#4a9b5f', borderColor: '#4a9b5f' },
   tabBtnText: { fontSize: 14, color: '#666', fontWeight: '600' },
   tabBtnTextActive: { color: '#fff' },
+  exportRow: { gap: 10, marginBottom: 14 },
   searchInput: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#1a1a1a', marginBottom: 8 },
   searchMeta: { fontSize: 12, color: '#666', marginBottom: 12 },
   saveCartBtn: { alignSelf: 'flex-start', backgroundColor: '#4a9b5f', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   saveCartBtnDisabled: { opacity: 0.6 },
   saveCartText: { color: '#fff', fontWeight: '700', fontSize: 12 },
+  exportBtn: { alignSelf: 'stretch', backgroundColor: '#eaf4ee', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, borderWidth: 1, borderColor: '#cfe3d4' },
+  exportBtnText: { color: '#2d6a4f', fontWeight: '700', fontSize: 13, textAlign: 'center' },
   secondaryBtn: { alignSelf: 'flex-start', backgroundColor: '#fff', borderColor: '#4a9b5f', borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 },
   secondaryBtnText: { color: '#2d6a4f', fontWeight: '700', fontSize: 12 },
   recommendedCard: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#e8f5ee' },
@@ -371,6 +538,11 @@ const styles = StyleSheet.create({
   mealDayName: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
   mealDayArrow: { fontSize: 18, color: '#aaa' },
   mealDayBody: { paddingHorizontal: 16, paddingBottom: 16, gap: 10 },
+  mealSectionCard: { borderWidth: 1, borderColor: '#e9efe9', borderRadius: 12, backgroundColor: '#fbfdfb', overflow: 'hidden' },
+  mealSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
+  mealSectionTitle: { fontSize: 13, fontWeight: '700', color: '#2d6a4f' },
+  mealSectionArrow: { fontSize: 16, color: '#87a08c' },
+  mealSectionBody: { borderTopWidth: 1, borderTopColor: '#edf3ed', paddingHorizontal: 12, paddingVertical: 10, gap: 10 },
   mealSlot: { gap: 2 },
   mealSlotLabel: { fontSize: 11, fontWeight: '700', color: '#4a9b5f', textTransform: 'uppercase', letterSpacing: 0.5 },
   mealSlotText: { fontSize: 14, color: '#333' },
