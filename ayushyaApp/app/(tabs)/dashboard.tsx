@@ -75,7 +75,7 @@ export default function Dashboard({ dosha, onNav }: DashboardProps) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Quick Access</Text>
         <View style={styles.quickActions}>
-          {([['🛒', 'Grocery List', 'recs'], ['🍲', 'Meal Plan', 'recs'], ['🥗', 'Food Pairs', 'pairing'], ['🌬️', 'AQI Routes', 'aqi'], ['📝', 'Log Meal', 'satmya']] as [string, string, string][]).map(([ic, label, nav]) => (
+          {([['🛒', 'Grocery List', 'recs'], ['🍲', 'Meal Plan', 'recs'], ['🥗', 'Food Pairs', 'pairing'], ['🚶', 'Take a Walk', 'aqi'], ['📝', 'Log Meal', 'satmya']] as [string, string, string][]).map(([ic, label, nav]) => (
             <TouchableOpacity key={label} style={styles.quickCard} onPress={() => onNav(nav)}>
               <Text style={styles.quickIcon}>{ic}</Text>
               <Text style={styles.quickLabel}>{label}</Text>

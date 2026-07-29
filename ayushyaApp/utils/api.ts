@@ -796,198 +796,6 @@ export async function getTodayMealSummary(
   }
 }
 
-type Coord = { lat: number; lon: number; label: string };
-type GeocodeResult = {
-  id?: string | number;
-  name?: string;
-  admin1?: string;
-  country?: string;
-  latitude?: number;
-  longitude?: number;
-};
-
-type GeocodeResultWithCoords = GeocodeResult & {
-  latitude: number;
-  longitude: number;
-};
-
-type PhotonFeature = {
-  geometry?: {
-    coordinates?: [number, number];
-  };
-  properties?: {
-    name?: string;
-    city?: string;
-    state?: string;
-    country?: string;
-  };
-};
-
-type OsrmRoute = {
-  distance: number;
-  duration: number;
-  geometry?: {
-    coordinates?: [number, number][];
-  };
-};
-
-function hasCoords(item: GeocodeResult): item is GeocodeResultWithCoords {
-  return typeof item.latitude === 'number' && typeof item.longitude === 'number';
-}
-
-function uniqueVariants(variants: string[]): string[] {
-  const seen = new Set<string>();
-  return variants.filter((v) => {
-    const key = v.toLowerCase().trim();
-    if (!key || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function isIndiaResult(result: GeocodeResult): boolean {
-  const country = String(result.country || '').toLowerCase();
-  return country.includes('india');
-}
-
-function toPhotonLabel(feature: PhotonFeature): string {
-  const name = feature.properties?.name || '';
-  const city = feature.properties?.city || '';
-  const state = feature.properties?.state || '';
-  const country = feature.properties?.country || '';
-
-  const parts = [name, city, state, country].map((p) => p.trim()).filter(Boolean);
-  return parts.join(', ');
-}
-
-function coordFromSuggestion(suggestion: LocationSuggestion): Coord {
-  return {
-    lat: suggestion.lat,
-    lon: suggestion.lon,
-    label: suggestion.label,
-  };
-}
-
-async function fetchPhotonSuggestions(query: string, limit: number): Promise<LocationSuggestion[]> {
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(limit, 10))}`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`Photon lookup failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const features: PhotonFeature[] = Array.isArray(data?.features) ? data.features : [];
-
-  const mapped = features
-    .map((feature, index) => {
-      const coords = feature.geometry?.coordinates;
-      if (!coords || typeof coords[0] !== 'number' || typeof coords[1] !== 'number') {
-        return null;
-      }
-
-      const label = toPhotonLabel(feature);
-      if (!label) {
-        return null;
-      }
-
-      return {
-        id: `${label}_${index}_${coords[1]}_${coords[0]}`,
-        label,
-        lat: coords[1],
-        lon: coords[0],
-      } as LocationSuggestion;
-    })
-    .filter((item): item is LocationSuggestion => !!item);
-
-  const indiaFirst = [
-    ...mapped.filter((item) => item.label.toLowerCase().includes('india')),
-    ...mapped.filter((item) => !item.label.toLowerCase().includes('india')),
-  ];
-
-  const dedup = new Set<string>();
-  return indiaFirst.filter((item) => {
-    const key = `${item.label}_${item.lat.toFixed(5)}_${item.lon.toFixed(5)}`;
-    if (dedup.has(key)) {
-      return false;
-    }
-    dedup.add(key);
-    return true;
-  });
-}
-
-async function fetchGeocodeResults(query: string, count: number): Promise<GeocodeResult[]> {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=${Math.max(1, Math.min(count, 12))}&language=en&format=json`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Open-Meteo geocoding failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  return Array.isArray(data?.results) ? data.results : [];
-}
-
-async function fetchOpenMeteoSuggestions(query: string, limit: number): Promise<LocationSuggestion[]> {
-  const variants = uniqueVariants([query, `${query}, India`]);
-  const allResults = (
-    await Promise.all(variants.map((variant) => fetchGeocodeResults(variant, Math.max(1, Math.min(limit, 10)))))
-  ).flat();
-
-  const indiaFirst = [
-    ...allResults.filter(isIndiaResult),
-    ...allResults.filter((r) => !isIndiaResult(r)),
-  ];
-
-  const dedup = new Set<string>();
-  return indiaFirst
-    .filter(hasCoords)
-    .map((item) => {
-      const city = item.name || '';
-      const admin = item.admin1 ? `, ${item.admin1}` : '';
-      const country = item.country ? `, ${item.country}` : '';
-      return {
-        id: String(item.id || `${city}_${item.latitude}_${item.longitude}`),
-        label: `${city}${admin}${country}`,
-        lat: item.latitude,
-        lon: item.longitude,
-      };
-    })
-    .filter((item) => {
-      const key = `${item.label}_${item.lat.toFixed(5)}_${item.lon.toFixed(5)}`;
-      if (dedup.has(key)) {
-        return false;
-      }
-      dedup.add(key);
-      return true;
-    })
-    .slice(0, Math.max(1, Math.min(limit, 10)));
-}
-
-async function geocodeLocation(query: string): Promise<Coord> {
-  const trimmed = query.trim();
-  if (!trimmed) {
-    throw new Error('Please enter a valid location');
-  }
-
-  try {
-    const photon = await fetchPhotonSuggestions(trimmed, 1);
-    if (photon.length > 0) {
-      return coordFromSuggestion(photon[0]);
-    }
-  } catch {
-    // Fall through to open-meteo geocoder fallback.
-  }
-
-  const fallback = await fetchOpenMeteoSuggestions(trimmed, 1);
-  if (fallback.length > 0) {
-    return coordFromSuggestion(fallback[0]);
-  }
-
-  throw new Error(`Could not locate "${query}". Try choosing from suggestions.`);
-}
-
 /**
  * Search location suggestions while user types source/destination.
  */
@@ -996,146 +804,16 @@ export async function searchLocationSuggestions(
   limit = 6
 ): Promise<{ success: boolean; suggestions?: LocationSuggestion[]; message?: string }> {
   try {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      return { success: true, suggestions: [] };
-    }
-
-    let suggestions: LocationSuggestion[] = [];
-
-    try {
-      suggestions = await fetchPhotonSuggestions(trimmed, limit);
-    } catch {
-      suggestions = [];
-    }
-
-    if (suggestions.length === 0) {
-      suggestions = await fetchOpenMeteoSuggestions(trimmed, limit);
-    }
-
-    return {
-      success: true,
-      suggestions: suggestions.slice(0, Math.max(1, Math.min(limit, 10))),
-    };
+    return await apiCall<{ success: boolean; suggestions?: LocationSuggestion[]; message?: string }>(
+      `/api/aqi/suggestions?q=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(limit, 10))}`,
+      'GET'
+    );
   } catch (error: any) {
     return {
       success: false,
       message: error.message || 'Failed to fetch location suggestions',
     };
   }
-}
-
-function roundAqi(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.max(0, Math.round(value));
-}
-
-async function fetchAqiAt(lat: number, lon: number): Promise<number> {
-  const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat.toFixed(5)}&longitude=${lon.toFixed(5)}&hourly=us_aqi&timezone=auto&forecast_days=1`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`AQI fetch failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const values: unknown[] = data?.hourly?.us_aqi || [];
-  const firstValid = values.find((value) => typeof value === 'number');
-
-  if (typeof firstValid !== 'number') {
-    throw new Error('No AQI values available for selected point');
-  }
-
-  return roundAqi(firstValid);
-}
-
-function minutesForActivity(distanceKm: number, activity: 'jogging' | 'cycling' | 'walking'): number {
-  const speed = activity === 'cycling' ? 18 : activity === 'jogging' ? 8 : 5;
-  const hours = distanceKm / speed;
-  return Math.max(5, Math.round(hours * 60));
-}
-
-function toKmLabel(distanceKm: number): string {
-  return `${distanceKm.toFixed(1)} km`;
-}
-
-function toTimeLabel(minutes: number): string {
-  return `${minutes} min`;
-}
-
-function samplePathPoints(path: { latitude: number; longitude: number }[], sampleCount: number): { latitude: number; longitude: number }[] {
-  if (path.length <= sampleCount) {
-    return path;
-  }
-
-  const result: { latitude: number; longitude: number }[] = [];
-  for (let i = 0; i < sampleCount; i += 1) {
-    const ratio = i / (sampleCount - 1);
-    const idx = Math.round(ratio * (path.length - 1));
-    result.push(path[idx]);
-  }
-
-  return result;
-}
-
-async function fetchOsrmRoutes(from: Coord, to: Coord): Promise<OsrmRoute[]> {
-  const url = `https://router.project-osrm.org/route/v1/driving/${from.lon},${from.lat};${to.lon},${to.lat}?alternatives=true&steps=false&overview=full&geometries=geojson`;
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(`OSRM route lookup failed: HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const routes: OsrmRoute[] = Array.isArray(data?.routes) ? data.routes : [];
-
-  return routes.filter((route) => Array.isArray(route.geometry?.coordinates) && route.geometry!.coordinates!.length > 1);
-}
-
-async function buildRoute(
-  id: string,
-  name: string,
-  route: OsrmRoute,
-  from: Coord,
-  to: Coord,
-  activity: 'jogging' | 'cycling' | 'walking'
-): Promise<AqiRoute> {
-  const path = (route.geometry?.coordinates || []).map(([lon, lat]) => ({
-    latitude: lat,
-    longitude: lon,
-  }));
-
-  if (path.length < 2) {
-    throw new Error('Route geometry is invalid');
-  }
-
-  const samples = samplePathPoints(path, 5);
-  const sampleLabels = samples.map((_, idx) => `Path sample ${idx + 1}`);
-
-  const aqiValues = await Promise.all(samples.map((pt) => fetchAqiAt(pt.latitude, pt.longitude)));
-  const segments = aqiValues.map((aqi, i) => ({ name: sampleLabels[i], aqi }));
-  const avgAqi = roundAqi(aqiValues.reduce((sum, n) => sum + n, 0) / aqiValues.length);
-  const maxAqi = Math.max(...aqiValues);
-
-  const totalDistanceKm = (route.distance || 0) / 1000;
-  const totalMinutes = minutesForActivity(totalDistanceKm, activity);
-  const midPoint = path[Math.floor(path.length / 2)];
-
-  return {
-    id,
-    name,
-    dist: toKmLabel(totalDistanceKm),
-    time: toTimeLabel(totalMinutes),
-    avgAqi,
-    maxAqi,
-    segments,
-    from: { latitude: from.lat, longitude: from.lon, label: from.label },
-    to: { latitude: to.lat, longitude: to.lon, label: to.label },
-    via: { latitude: midPoint.latitude, longitude: midPoint.longitude, label: 'Route midpoint' },
-    path,
-  };
 }
 
 /**
@@ -1151,29 +829,16 @@ export async function getAqiRouteRecommendations(
   }
 ): Promise<{ success: boolean; routes?: AqiRoute[]; message?: string }> {
   try {
-    const from = options?.fromCoord
-      ? { lat: options.fromCoord.lat, lon: options.fromCoord.lon, label: options.fromCoord.label || fromText }
-      : await geocodeLocation(fromText);
-
-    const to = options?.toCoord
-      ? { lat: options.toCoord.lat, lon: options.toCoord.lon, label: options.toCoord.label || toText }
-      : await geocodeLocation(toText);
-
-    const osrmRoutes = await fetchOsrmRoutes(from, to);
-    if (osrmRoutes.length === 0) {
-      throw new Error('No route found between selected locations');
-    }
-
-    const routes = await Promise.all(
-      osrmRoutes.slice(0, 3).map((route, idx) => buildRoute(`cleanest-${idx + 1}`, `Route ${idx + 1}`, route, from, to, activity))
+    return await apiCall<{ success: boolean; routes?: AqiRoute[]; message?: string }>(
+      '/api/aqi/routes',
+      'POST',
+      {
+        fromText,
+        toText,
+        activity,
+        options,
+      }
     );
-
-    routes.sort((a, b) => a.avgAqi - b.avgAqi);
-
-    return {
-      success: true,
-      routes,
-    };
   } catch (error: any) {
     return {
       success: false,

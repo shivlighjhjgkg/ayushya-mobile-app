@@ -52,7 +52,6 @@ function getSegmentDisplayName(route: AqiRoute, segmentName: string, index: numb
 export default function AQI() {
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
-  const [activity, setActivity] = useState<string>('jogging');
   const [results, setResults] = useState<AqiRoute[] | null>(null);
   const [openRoute, setOpenRoute] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -112,7 +111,7 @@ export default function AQI() {
     const response = await getAqiRouteRecommendations(
       from,
       to,
-      activity as 'jogging' | 'cycling' | 'walking',
+      'walking',
       {
         fromCoord: fromSelected && fromSelected.label === from
           ? { lat: fromSelected.lat, lon: fromSelected.lon, label: fromSelected.label }
@@ -137,16 +136,17 @@ export default function AQI() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scroll}>
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>AQI Route Planner</Text>
-        <Text style={styles.pageSub}>Find the cleanest air route for your jog or ride anywhere in India</Text>
+        <Text style={styles.pageTitle}>Take a Walk</Text>
+        <Text style={styles.pageSub}>Find cleaner walking routes with live air-quality guidance anywhere in India</Text>
       </View>
 
       {/* Form Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Plan Your Route</Text>
-        <Text style={styles.cardSub}>Enter your start and destination points. We will find route options with better air quality.</Text>
+        <Text style={styles.cardTitle}>Plan Your Walk</Text>
+        <Text style={styles.cardSub}>Enter your start and end points. We will rank walk options by cleaner air.
+        </Text>
 
-        <Text style={styles.inputLabel}>Starting Point</Text>
+        <Text style={styles.inputLabel}>Walk Start</Text>
         <View style={styles.inputWrap}>
           <Text style={styles.inputPin}>📍</Text>
           <TextInput
@@ -176,7 +176,7 @@ export default function AQI() {
           </View>
         )}
 
-        <Text style={styles.inputLabel}>Destination</Text>
+        <Text style={styles.inputLabel}>Walk End</Text>
         <View style={styles.inputWrap}>
           <Text style={styles.inputPin}>🏁</Text>
           <TextInput
@@ -206,20 +206,6 @@ export default function AQI() {
           </View>
         )}
 
-        <Text style={styles.activityLabel}>Activity Type</Text>
-        <View style={styles.activityRow}>
-          {([['jogging', '🏃', 'Jogging'], ['cycling', '🚴', 'Cycling'], ['walking', '🚶', 'Walking']] as [string, string, string][]).map(([k, ic, lb]) => (
-            <TouchableOpacity
-              key={k}
-              style={[styles.activityBtn, activity === k && styles.activityBtnActive]}
-              onPress={() => setActivity(k)}
-            >
-              <Text style={styles.activityIcon}>{ic}</Text>
-              <Text style={[styles.activityLabel2, activity === k && styles.activityLabelActive]}>{lb}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <TouchableOpacity
           style={[styles.findBtn, (!from || !to || isLoading) && { opacity: 0.4 }]}
           onPress={() => {
@@ -230,7 +216,7 @@ export default function AQI() {
           }}
           disabled={!from || !to || isLoading}
         >
-          <Text style={styles.findBtnText}>{isLoading ? 'Finding Routes...' : 'Find Best Routes'}</Text>
+          <Text style={styles.findBtnText}>{isLoading ? 'Finding Walks...' : 'Find Walks'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -238,20 +224,20 @@ export default function AQI() {
       {errorMsg ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 34, marginBottom: 12 }}>⚠️</Text>
-          <Text style={styles.emptyTitle}>Could not fetch live AQI</Text>
+          <Text style={styles.emptyTitle}>Could not fetch live walk data</Text>
           <Text style={styles.emptySub}>{errorMsg}</Text>
         </View>
       ) : !results ? (
         <View style={styles.emptyState}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>🌬️</Text>
-          <Text style={styles.emptyTitle}>Enter your route details</Text>
-          <Text style={styles.emptySub}>Results will appear here with live AQI breakdown per segment</Text>
+          <Text style={styles.emptyTitle}>Start your walk search</Text>
+          <Text style={styles.emptySub}>Results will show cleaner air, route length, and segment details for each walk</Text>
         </View>
       ) : (
         <View>
           <View style={styles.resultsHeader}>
-            <Text style={styles.resultsCount}><Text style={{ fontWeight: '700', color: '#1a1a1a' }}>{results.length}</Text> routes found</Text>
-            <Text style={styles.resultsSorted}>Sorted by best AQI</Text>
+            <Text style={styles.resultsCount}><Text style={{ fontWeight: '700', color: '#1a1a1a' }}>{results.length}</Text> walks found</Text>
+            <Text style={styles.resultsSorted}>Sorted by cleanest air</Text>
           </View>
           {results.map((r, i) => (
             <TouchableOpacity
@@ -282,12 +268,12 @@ export default function AQI() {
                   {r.segments.map((s, j) => (
                     <View style={styles.segmentRow} key={j}>
                       <Text style={styles.segmentName}>{getSegmentDisplayName(r, s.name, j)}</Text>
-                      <Text style={[styles.segmentAqi, { color: segColor[getSegmentClass(s.aqi)] }]}>AQI {s.aqi}</Text>
+                      <Text style={[styles.segmentAqi, { color: segColor[getSegmentClass(s.aqi)] }]}>Air {s.aqi}</Text>
                     </View>
                   ))}
                   <View style={styles.peakRow}>
                     <Text style={styles.peakText}>
-                      Peak AQI on this route: <Text style={{ color: r.maxAqi > 50 ? '#c07a20' : '#4a9b5f', fontWeight: '700' }}>{r.maxAqi}</Text>
+                      Peak air score on this walk: <Text style={{ color: r.maxAqi > 50 ? '#c07a20' : '#4a9b5f', fontWeight: '700' }}>{r.maxAqi}</Text>
                     </Text>
                   </View>
                 </View>
@@ -316,13 +302,6 @@ const styles = StyleSheet.create({
   suggestionsWrap: { marginTop: -8, marginBottom: 10, borderWidth: 1, borderColor: '#e6e6e6', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
   suggestionRow: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f1f1' },
   suggestionText: { fontSize: 13, color: '#333' },
-  activityLabel: { fontSize: 12, fontWeight: '600', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  activityRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  activityBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: '#e0e0e0', backgroundColor: '#fafafa' },
-  activityBtnActive: { borderColor: '#4a9b5f', backgroundColor: '#f0f7f2' },
-  activityIcon: { fontSize: 20, marginBottom: 4 },
-  activityLabel2: { fontSize: 12, color: '#666' },
-  activityLabelActive: { color: '#2d6a4f', fontWeight: '600' },
   findBtn: { backgroundColor: '#4a9b5f', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   findBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   emptyState: { backgroundColor: '#fff', borderRadius: 16, padding: 40, alignItems: 'center' },

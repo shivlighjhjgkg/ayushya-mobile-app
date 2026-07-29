@@ -20,7 +20,7 @@ export default function AqiBadge({ val }: AqiBadgeProps) {
   return (
     <View style={[styles.badge, { backgroundColor: color + '22', borderColor: color }]}>
       <Text style={[styles.text, { color }]}>
-        AQI {val}{' '}
+        Air {val}{' '}
         <Text style={styles.sub}>({label})</Text>
       </Text>
     </View>

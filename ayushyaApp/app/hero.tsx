@@ -32,7 +32,7 @@ export default function Hero({ onStart }: HeroProps) {
         </Text>
 
         <View style={styles.pillsRow}>
-          {[['🌿', 'Dosha Profiling'], ['📋', 'Weekly Meal Plans'], ['🌬️', 'AQI Route Finder'], ['📝', 'Satmya Logging']].map(([icon, label]) => (
+          {[['🌿', 'Dosha Profiling'], ['📋', 'Weekly Meal Plans'], ['🚶', 'Take a Walk'], ['📝', 'Satmya Logging']].map(([icon, label]) => (
             <View key={label} style={styles.pill}>
               <Text style={styles.pillText}>{icon} {label}</Text>
             </View>

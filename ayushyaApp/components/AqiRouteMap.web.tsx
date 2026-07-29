@@ -55,8 +55,8 @@ export default function AqiRouteMap({ route, fromLabel, toLabel }: AqiRouteMapPr
 
   return (
     <View style={styles.placeholder}>
-      <Text style={styles.title}>Route circuit preview</Text>
-      <Text style={styles.sub}>This is the actual path geometry returned for the selected route.</Text>
+      <Text style={styles.title}>Walk preview</Text>
+      <Text style={styles.sub}>This is the actual path geometry returned for the selected walk.</Text>
 
       <View style={styles.mapWrap}>
         <Svg width="100%" height={mapHeight} viewBox={`0 0 ${mapWidth} ${mapHeight}`}>

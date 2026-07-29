@@ -65,7 +65,7 @@ export const NAV = [
   { key:'recs', icon:'📋', label:'Weekly Plan' },
   { key:'satmya', icon:'📝', label:'Daily Log' },
   { key:'pairing', icon:'🥗', label:'Food Pairs' },
-  { key:'aqi', icon:'🌬️', label:'AQI Routes' },
+  { key:'aqi', icon:'🚶', label:'Take a Walk' },
   { key:'family', icon:'👪', label:'Family' },
   { key:'more', icon:'⋯', label:'More' },
 ];

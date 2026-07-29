@@ -8,6 +8,7 @@ const authRoutes = require('./routes/auth');
 const healthProfileRoutes = require('./routes/healthProfiles');
 const familyRoutes = require('./routes/family');
 const groceryListRoutes = require('./routes/groceryLists');
+const aqiRoutes = require('./routes/aqi');
 const mealPlanRoutes = require('./routes/mealPlans');
 const mealFeedbackRoutes = require('./routes/mealFeedback');
 
@@ -84,6 +85,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/health/profile', healthProfileRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/grocery-lists', groceryListRoutes);
+app.use('/api/aqi', aqiRoutes);
 app.use('/api/meal-plans', mealPlanRoutes);
 app.use('/api/meal-feedback', mealFeedbackRoutes);
 
