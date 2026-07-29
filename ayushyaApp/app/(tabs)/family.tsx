@@ -1,5 +1,6 @@
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useEffect, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../utils/authContext';
 import { createFamily, joinFamily, getFamily } from '../../utils/database';
 import { Family } from '../../utils/api';
@@ -106,6 +107,20 @@ export default function FamilyScreen() {
     }
   };
 
+  const handleCopyFamilyCode = async () => {
+    if (!family?.familyCode) {
+      Alert.alert('No code found', 'Could not find a family code to copy.');
+      return;
+    }
+
+    try {
+      await Clipboard.setStringAsync(family.familyCode);
+      Alert.alert('Copied', 'Family code copied to clipboard.');
+    } catch (error: any) {
+      Alert.alert('Copy failed', error?.message || 'Could not copy family code.');
+    }
+  };
+
   return (
     <ScrollView
       style={styles.root}
@@ -183,9 +198,7 @@ export default function FamilyScreen() {
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => {
-              Alert.alert('Family Code', `Share this code with family members:\n\n${family.familyCode}`);
-            }}
+            onPress={handleCopyFamilyCode}
           >
             <Text style={styles.secondaryButtonText}>📋 Copy Code</Text>
           </TouchableOpacity>

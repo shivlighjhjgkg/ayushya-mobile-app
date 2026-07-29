@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import AqiBadge from '../../components/AqiBadge';
+import AqiRouteMap from '../../components/AqiRouteMap';
 import { getSegmentClass } from '../../utils/aqiHelpers';
 import {
   getAqiRouteRecommendations,
@@ -11,6 +12,42 @@ import {
 } from '../../utils/api';
 
 const segColor: Record<string, string> = { g: '#4a9b5f', m: '#f0b930', p: '#e8763a' };
+
+function getRouteRegion(route: AqiRoute) {
+  const points = route.path && route.path.length > 0 ? route.path : [route.from, route.via, route.to];
+  const latitudes = points.map((p) => p.latitude);
+  const longitudes = points.map((p) => p.longitude);
+
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLon = Math.min(...longitudes);
+  const maxLon = Math.max(...longitudes);
+
+  const latitude = (minLat + maxLat) / 2;
+  const longitude = (minLon + maxLon) / 2;
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta: Math.max((maxLat - minLat) * 1.6, 0.02),
+    longitudeDelta: Math.max((maxLon - minLon) * 1.6, 0.02),
+  };
+}
+
+function getSegmentDisplayName(route: AqiRoute, segmentName: string, index: number) {
+  const trimmed = String(segmentName || '').trim();
+
+  if (trimmed && !/^path sample\s*\d*$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const point = route.path[index] || route.path[route.path.length - 1] || route.to;
+  if (!point) {
+    return `Waypoint ${index + 1}`;
+  }
+
+  return `Waypoint ${index + 1} (${point.latitude.toFixed(3)}, ${point.longitude.toFixed(3)})`;
+}
 
 export default function AQI() {
   const [from, setFrom] = useState<string>('');
@@ -235,10 +272,16 @@ export default function AQI() {
 
               {openRoute === i && (
                 <View style={styles.segments}>
+                  <AqiRouteMap
+                    route={r}
+                    region={getRouteRegion(r)}
+                    fromLabel={from}
+                    toLabel={to}
+                  />
                   <Text style={styles.segmentsLabel}>Segment Breakdown</Text>
                   {r.segments.map((s, j) => (
                     <View style={styles.segmentRow} key={j}>
-                      <Text style={styles.segmentName}>{s.name}</Text>
+                      <Text style={styles.segmentName}>{getSegmentDisplayName(r, s.name, j)}</Text>
                       <Text style={[styles.segmentAqi, { color: segColor[getSegmentClass(s.aqi)] }]}>AQI {s.aqi}</Text>
                     </View>
                   ))}

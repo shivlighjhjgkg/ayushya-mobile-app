@@ -1,3 +1,5 @@
+#this script gives you the number of labels in each column 
+
 import pandas as pd
 import os
 import sys

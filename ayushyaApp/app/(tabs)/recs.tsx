@@ -1,6 +1,6 @@
 // app/(tabs)/recs.tsx
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { GROCERY_ITEMS } from '../../utils/groceryItems';
@@ -118,6 +118,26 @@ export default function Recs() {
   const renderDish = (label: string, meal: MealChoice) => {
     const matched = meal.matchedIngredients || [];
     const unmatched = meal.unmatchedIngredients || [];
+    const rawUrl = meal.url?.trim();
+    const recipeUrl = rawUrl
+      ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+        ? rawUrl
+        : `https://${rawUrl.replace(/^\/+/, '')}`
+      : '';
+
+    const openRecipeUrl = async () => {
+      if (!recipeUrl) {
+        return;
+      }
+
+      const canOpen = await Linking.canOpenURL(recipeUrl);
+      if (!canOpen) {
+        Alert.alert('Invalid recipe URL', 'Could not open this recipe link.');
+        return;
+      }
+
+      await Linking.openURL(recipeUrl);
+    };
 
     return (
       <View style={styles.mealSlot}>
@@ -135,6 +155,11 @@ export default function Recs() {
             </View>
           ))}
         </View>
+        {!!recipeUrl && (
+          <TouchableOpacity onPress={openRecipeUrl} style={styles.recipeLinkWrap}>
+            <Text style={styles.recipeLinkText}>View recipe</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -551,6 +576,8 @@ const styles = StyleSheet.create({
   ingredientChipGoodText: { color: '#2d6a4f', fontSize: 10, fontWeight: '600' },
   ingredientChipBad: { backgroundColor: '#fdecea', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   ingredientChipBadText: { color: '#b64c2f', fontSize: 10, fontWeight: '600' },
+  recipeLinkWrap: { marginTop: 6, alignSelf: 'flex-start' },
+  recipeLinkText: { color: '#1d6fdc', fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   mealPlanError: { color: '#b64c2f', fontSize: 13, marginBottom: 8 },
   mealPlanHint: { color: '#666', fontSize: 13 },
   mealTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },

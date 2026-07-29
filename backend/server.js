@@ -49,7 +49,9 @@ async function startServer() {
       console.log(`  POST /api/auth/login\n`);
     });
   } catch (err) {
-    console.error('❌ MongoDB connection error:', err.message);
+    console.error('❌ MongoDB connection error:');
+    console.error(err);
+    console.error(err.stack);
     process.exit(1);
   }
 }
